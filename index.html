@@ -593,6 +593,132 @@
       text-align: right;
     }
 
+    /* ==========================================================================
+       獨立完整遊戲說明視窗（可隨時隱藏／切換大小／自由拖曳移動）
+       ========================================================================== */
+    .rules-panel-stage {
+      position: absolute;
+      left: 18px;
+      top: 18px;
+      z-index: 23;
+      width: 410px;
+      max-width: calc(100% - 24px);
+      max-height: calc(100% - 36px);
+      background: linear-gradient(155deg, rgba(15, 23, 42, 0.95), rgba(17, 24, 39, 0.94));
+      border: 1.5px solid rgba(34, 211, 238, 0.6);
+      border-radius: 18px;
+      padding: 12px 14px 14px;
+      box-shadow: 0 14px 40px rgba(0, 0, 0, 0.72), 0 0 26px rgba(34, 211, 238, 0.2);
+      backdrop-filter: blur(10px);
+      display: flex;
+      flex-direction: column;
+      gap: 9px;
+      transition: width 0.22s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+      touch-action: none;
+    }
+
+    .rules-panel-stage.is-dragging {
+      transition: none;
+      border-color: var(--gold);
+      box-shadow: 0 20px 52px rgba(0, 0, 0, 0.85), 0 0 34px rgba(251, 191, 36, 0.45);
+      z-index: 41;
+    }
+
+    .rules-panel-stage.size-sm { width: 320px; padding: 10px 11px; }
+    .rules-panel-stage.size-sm .rules-list { font-size: 12px; gap: 6px; }
+    .rules-panel-stage.size-md { width: 410px; }
+    .rules-panel-stage.size-md .rules-list { font-size: 13px; gap: 7px; }
+    .rules-panel-stage.size-lg { width: 560px; padding: 15px 18px 16px; }
+    .rules-panel-stage.size-lg .rules-list { font-size: 15.5px; gap: 9px; }
+
+    .rules-panel-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 6px;
+      border-bottom: 1px solid rgba(148, 163, 184, 0.22);
+      padding-bottom: 7px;
+      cursor: grab;
+      user-select: none;
+      flex-shrink: 0;
+    }
+
+    .rules-panel-stage.is-dragging .rules-panel-header {
+      cursor: grabbing;
+    }
+
+    .rules-panel-title {
+      font-size: 14px;
+      font-weight: 900;
+      color: var(--cyan);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .rules-mode-pills {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+
+    .rules-pill {
+      font-size: 11px;
+      font-weight: 800;
+      padding: 3px 8px;
+      border-radius: 999px;
+      background: rgba(34, 211, 238, 0.14);
+      border: 1px solid rgba(34, 211, 238, 0.4);
+      color: #a5f3fc;
+    }
+
+    .rules-pill.gold {
+      background: rgba(251, 191, 36, 0.14);
+      border-color: rgba(251, 191, 36, 0.45);
+      color: var(--gold-bright);
+    }
+
+    .rules-list {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 7px;
+      overflow-y: auto;
+      padding-right: 2px;
+      color: #e2e8f0;
+      line-height: 1.5;
+    }
+
+    .rules-list li {
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+      padding: 6px 8px;
+      border-radius: 10px;
+      background: rgba(2, 6, 23, 0.55);
+      border: 1px solid rgba(148, 163, 184, 0.16);
+    }
+
+    .rules-step-num {
+      flex-shrink: 0;
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #fbbf24, #d97706);
+      color: #1c0f00;
+      font-size: 12px;
+      font-weight: 900;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      margin-top: 1px;
+    }
+
+    .rules-list strong {
+      color: var(--gold-bright);
+    }
+
     /* 員工卡片格子（自適應縮放） */
     .emp-tile {
       position: relative;
@@ -1855,6 +1981,7 @@
       <div class="header-actions">
         <button id="btnOpenRosterModal" class="btn btn-gold" type="button">📋 員工清冊</button>
         <button id="btnExportResults" class="btn btn-emerald" type="button">📊 匯出結果</button>
+        <button id="btnToggleRulesPanel" class="btn btn-cyan" type="button" title="顯示或隱藏完整遊戲說明視窗">📖 遊戲說明</button>
         <button id="btnToggleHandDemo" class="btn btn-cyan" type="button" title="顯示或隱藏等待時動態手掌動作示意">✋ 手掌示意</button>
         <button id="btnToggleSimPanel" class="btn btn-purple" type="button">🧪 模擬測試</button>
         <button id="btnOpenAudioModal" class="btn" type="button">🎵 音效</button>
@@ -1884,6 +2011,48 @@
         </div>
 
         <div id="stageGrid" class="stage-grid-wrap"></div>
+
+        <!-- 獨立完整遊戲說明視窗（可隨時隱藏／切換大小／自由移動） -->
+        <div id="rulesPanelOverlay" class="rules-panel-stage size-md" aria-label="完整遊戲說明視窗">
+          <div id="rulesPanelDragHandle" class="rules-panel-header" title="按住拖曳可自由移動位置，雙擊可歸位至左上角">
+            <div class="rules-panel-title">
+              <span class="drag-grip" aria-hidden="true">⠿</span>
+              <span>📖 完整遊戲說明</span>
+            </div>
+            <div class="hand-demo-controls">
+              <button id="btnRulesSize" class="btn" style="padding:3px 7px; font-size:11px;" type="button" title="切換說明視窗大小（小／中／大）">📐 中</button>
+              <button id="btnHideRulesPanel" class="btn btn-danger" style="padding:3px 7px; font-size:11px;" type="button" title="隱藏遊戲說明">✕ 隱藏</button>
+            </div>
+          </div>
+
+          <div class="rules-mode-pills">
+            <span id="rulesJoinModePill" class="rules-pill gold">目前模式：📋 清冊驗證</span>
+            <span id="rulesMaxSticksPill" class="rules-pill">出支範圍：1 ~ 10 支（雙手）</span>
+          </div>
+
+          <ol class="rules-list">
+            <li>
+              <span class="rules-step-num">1</span>
+              <div><strong>掃碼報到出支：</strong>掃描右側 QR Code，<span id="rulesJoinStepText">輸入員工編號</span>並點選本輪要出的支數（<span id="rulesSticksStepText">1 ~ 10 支</span>），送出後即隱藏鎖定。</div>
+            </li>
+            <li>
+              <span class="rules-step-num">2</span>
+              <div><strong>防覆蓋與退出機制：</strong>已鎖定的身分禁止其他人覆蓋；開跑前如需修改支數，可於手機點「退出並釋放」後重新送出。</div>
+            </li>
+            <li>
+              <span class="rules-step-num">3</span>
+              <div><strong>開局隨機排位＋隨機起點：</strong>主持人鎖定開跑後，系統立即全場翻牌、<strong>隨機打散排位</strong>並抽出<strong>隨機起點</strong>出發。</div>
+            </li>
+            <li>
+              <span class="rules-step-num">4</span>
+              <div><strong>傳統不淘汰公平數支：</strong>加總全場所有支數，從起點繞全場依序循環數完（不因個人支數歸零而跳過），不論出幾支每人中獎機率皆完全均等！</div>
+            </li>
+            <li>
+              <span class="rules-step-num">5</span>
+              <div><strong>高潮換位與雙端開獎：</strong>剩最後 40% 可全場洗牌、10% 可開啟動態換位、最後 20 支慢動作懸疑減速；手機將同步顯示即時進度，最後 1 支停在誰身上即為幸運中獎者！</div>
+            </li>
+          </ol>
+        </div>
 
         <!-- 等待時動態表演手掌動作示意（可隨時隱藏／切換大小／自由移動） -->
         <div id="handDemoOverlay" class="hand-demo-stage size-md" aria-label="等待時動態表演手掌動作示意">
@@ -2323,7 +2492,7 @@
     <div class="prompt-modal" style="border-color:#c084fc;">
       <div style="font-size:52px;">⚡</div>
       <h3>進入最後 10% 決戰！是否開啟動態換位？</h3>
-      <p id="shuffle10Desc">即將揭曉最終中獎者！請問是否開啟「動態換位」模式（每推進一支即隨機交換尚未歸零的參賽者位置），將現場緊張氣氛拉到最高點？</p>
+      <p id="shuffle10Desc">即將揭曉最終中獎者！請問是否開啟「動態換位」模式（每推進一支即隨機交換全場參賽者位置），將現場緊張氣氛拉到最高點？</p>
       <div class="btn-row" style="justify-content:center; gap:12px; margin-top:6px;">
         <button id="btnDoShuffle10" class="btn btn-purple" style="padding:13px 22px; font-size:16px;" type="button">🔥 開啟動態換位並繼續</button>
         <button id="btnSkipShuffle10" class="btn" style="padding:13px 22px; font-size:16px;" type="button">➡️ 維持原位繼續</button>
@@ -2387,6 +2556,9 @@
     const STORAGE_HAND_HIDDEN_KEY = 'countgame_hand_demo_hidden_v2';
     const STORAGE_HAND_SIZE_KEY = 'countgame_hand_demo_size_v2';
     const STORAGE_HAND_POS_KEY = 'countgame_hand_demo_pos_v2';
+    const STORAGE_RULES_HIDDEN_KEY = 'countgame_rules_hidden_v2';
+    const STORAGE_RULES_SIZE_KEY = 'countgame_rules_size_v2';
+    const STORAGE_RULES_POS_KEY = 'countgame_rules_pos_v2';
     const STORAGE_PLAYER_EMP_KEY = 'countgame_player_emp_v2';
     const STORAGE_PLAYER_DEV_KEY = 'countgame_player_device_v2';
     const PERF_MODE_THRESHOLD = 240; // 超過此人數自動啟用高效能渲染模式，無人數上限
@@ -3188,6 +3360,193 @@
     })();
 
     /* ==========================================================================
+       獨立完整遊戲說明視窗控制器（可隨時隱藏／三段大小切換／自由拖曳）
+       ========================================================================== */
+    const RulesPanelEngine = (() => {
+      const SIZE_LIST = [
+        { key: 'sm', label: '📐 小' },
+        { key: 'md', label: '📐 中' },
+        { key: 'lg', label: '📐 大' }
+      ];
+      let isVisible = safeGetStorage(STORAGE_RULES_HIDDEN_KEY) !== '1';
+      let sizeIdx = Math.max(0, SIZE_LIST.findIndex(x => x.key === safeGetStorage(STORAGE_RULES_SIZE_KEY)));
+      if (!safeGetStorage(STORAGE_RULES_SIZE_KEY)) sizeIdx = 1;
+      let hasCustomPos = false;
+
+      function clampPosition() {
+        const overlay = document.getElementById('rulesPanelOverlay');
+        if (!overlay || !hasCustomPos) return;
+        const parent = overlay.parentElement;
+        if (!parent) return;
+        const pRect = parent.getBoundingClientRect();
+        const oRect = overlay.getBoundingClientRect();
+        const maxLeft = Math.max(8, pRect.width - oRect.width - 8);
+        const maxTop = Math.max(8, pRect.height - oRect.height - 8);
+        const curLeft = parseFloat(overlay.style.left) || 18;
+        const curTop = parseFloat(overlay.style.top) || 18;
+        overlay.style.left = `${Math.round(Math.max(8, Math.min(maxLeft, curLeft)))}px`;
+        overlay.style.top = `${Math.round(Math.max(8, Math.min(maxTop, curTop)))}px`;
+      }
+
+      function applySize(idx, persist = true) {
+        sizeIdx = ((idx % SIZE_LIST.length) + SIZE_LIST.length) % SIZE_LIST.length;
+        const item = SIZE_LIST[sizeIdx];
+        const overlay = document.getElementById('rulesPanelOverlay');
+        const btn = document.getElementById('btnRulesSize');
+        if (overlay) {
+          SIZE_LIST.forEach(sObj => overlay.classList.remove(`size-${sObj.key}`));
+          overlay.classList.add(`size-${item.key}`);
+        }
+        if (btn) btn.textContent = item.label;
+        if (persist) safeSetStorage(STORAGE_RULES_SIZE_KEY, item.key);
+        requestAnimationFrame(() => clampPosition());
+      }
+
+      function syncVisibilityUI() {
+        const overlay = document.getElementById('rulesPanelOverlay');
+        const toggleBtn = document.getElementById('btnToggleRulesPanel');
+        if (overlay) overlay.classList.toggle('hidden', !isVisible);
+        if (toggleBtn) {
+          toggleBtn.textContent = isVisible ? '📖 隱藏說明' : '📖 遊戲說明';
+          toggleBtn.classList.toggle('btn-cyan', isVisible);
+        }
+      }
+
+      function setVisible(show, persist = true) {
+        isVisible = Boolean(show);
+        if (persist) safeSetStorage(STORAGE_RULES_HIDDEN_KEY, isVisible ? '0' : '1');
+        syncVisibilityUI();
+      }
+
+      function toggleVisible() {
+        setVisible(!isVisible, true);
+      }
+
+      function resetPosition() {
+        const overlay = document.getElementById('rulesPanelOverlay');
+        if (!overlay) return;
+        hasCustomPos = false;
+        overlay.style.left = '18px';
+        overlay.style.top = '18px';
+        safeSetStorage(STORAGE_RULES_POS_KEY, '');
+        showToast('📖 遊戲說明視窗已歸位至左上角');
+      }
+
+      function syncRuleDynamicText(joinMode, maxSticks) {
+        const isOpen = joinMode === 'open';
+        const is5 = maxSticks === 5;
+        const joinPill = document.getElementById('rulesJoinModePill');
+        const maxPill = document.getElementById('rulesMaxSticksPill');
+        const joinStep = document.getElementById('rulesJoinStepText');
+        const sticksStep = document.getElementById('rulesSticksStepText');
+
+        if (joinPill) joinPill.textContent = isOpen ? '目前模式：⚡ 即時參加（不限工號）' : '目前模式：📋 清冊驗證';
+        if (maxPill) maxPill.textContent = is5 ? '出支範圍：1 ~ 5 支（單手）' : '出支範圍：1 ~ 10 支（雙手）';
+        if (joinStep) joinStep.textContent = isOpen ? '輸入任意姓名、暱稱或自訂編號' : '輸入員工清冊內的員工編號';
+        if (sticksStep) sticksStep.textContent = is5 ? '1 ~ 5 支' : '1 ~ 10 支';
+      }
+
+      function initDragSupport() {
+        const overlay = document.getElementById('rulesPanelOverlay');
+        const handle = document.getElementById('rulesPanelDragHandle');
+        if (!overlay || !handle) return;
+
+        const savedPosRaw = safeGetStorage(STORAGE_RULES_POS_KEY);
+        if (savedPosRaw) {
+          try {
+            const parsed = JSON.parse(savedPosRaw);
+            if (typeof parsed.left === 'number' && typeof parsed.top === 'number') {
+              hasCustomPos = true;
+              overlay.style.left = `${parsed.left}px`;
+              overlay.style.top = `${parsed.top}px`;
+              requestAnimationFrame(() => clampPosition());
+            }
+          } catch (e) {}
+        }
+
+        let dragging = false;
+        let offsetX = 0;
+        let offsetY = 0;
+
+        handle.addEventListener('pointerdown', (e) => {
+          if (e.target.closest('button')) return;
+          const parent = overlay.parentElement;
+          if (!parent) return;
+          const pRect = parent.getBoundingClientRect();
+          const oRect = overlay.getBoundingClientRect();
+
+          overlay.style.left = `${Math.round(oRect.left - pRect.left)}px`;
+          overlay.style.top = `${Math.round(oRect.top - pRect.top)}px`;
+
+          hasCustomPos = true;
+          dragging = true;
+          offsetX = e.clientX - oRect.left;
+          offsetY = e.clientY - oRect.top;
+          overlay.classList.add('is-dragging');
+          if (handle.setPointerCapture) {
+            try { handle.setPointerCapture(e.pointerId); } catch (err) {}
+          }
+          e.preventDefault();
+        });
+
+        handle.addEventListener('pointermove', (e) => {
+          if (!dragging) return;
+          const parent = overlay.parentElement;
+          if (!parent) return;
+          const pRect = parent.getBoundingClientRect();
+          const oRect = overlay.getBoundingClientRect();
+
+          const rawLeft = e.clientX - pRect.left - offsetX;
+          const rawTop = e.clientY - pRect.top - offsetY;
+          const maxLeft = Math.max(8, pRect.width - oRect.width - 8);
+          const maxTop = Math.max(8, pRect.height - oRect.height - 8);
+
+          overlay.style.left = `${Math.round(Math.max(8, Math.min(maxLeft, rawLeft)))}px`;
+          overlay.style.top = `${Math.round(Math.max(8, Math.min(maxTop, rawTop)))}px`;
+        });
+
+        function endDrag(e) {
+          if (!dragging) return;
+          dragging = false;
+          overlay.classList.remove('is-dragging');
+          if (handle.releasePointerCapture && e && e.pointerId !== undefined) {
+            try { handle.releasePointerCapture(e.pointerId); } catch (err) {}
+          }
+          const left = parseFloat(overlay.style.left);
+          const top = parseFloat(overlay.style.top);
+          if (!isNaN(left) && !isNaN(top)) {
+            safeSetStorage(STORAGE_RULES_POS_KEY, JSON.stringify({ left, top }));
+          }
+        }
+
+        handle.addEventListener('pointerup', endDrag);
+        handle.addEventListener('pointercancel', endDrag);
+        handle.addEventListener('dblclick', (e) => {
+          if (e.target.closest('button')) return;
+          resetPosition();
+        });
+
+        window.addEventListener('resize', () => clampPosition());
+      }
+
+      return {
+        init(joinMode, maxSticks) {
+          applySize(sizeIdx, false);
+          syncRuleDynamicText(joinMode, maxSticks);
+          initDragSupport();
+          syncVisibilityUI();
+        },
+        setVisible,
+        toggleVisible,
+        cycleSize() { applySize(sizeIdx + 1, true); },
+        syncRuleDynamicText,
+        isUserPreferredVisible() {
+          return safeGetStorage(STORAGE_RULES_HIDDEN_KEY) !== '1';
+        }
+      };
+    })();
+
+    /* ==========================================================================
        一、主持端核心邏輯
        ========================================================================== */
     function initHostMode() {
@@ -3305,6 +3664,7 @@
         }
         const emptyTitle = document.getElementById('emptyStageTitle');
         const emptyDesc = document.getElementById('emptyStageDesc');
+        RulesPanelEngine.syncRuleDynamicText(joinMode, maxSticks);
         if (emptyTitle && emptyDesc) {
           if (isOpen) {
             emptyTitle.textContent = '⚡ 即時參加模式已開啟（不限員工號碼）';
@@ -3341,6 +3701,7 @@
         document.getElementById('statMaxSticks').textContent = `${maxSticks}支`;
         populateSimStickOptions();
         HandDemoEngine.setMaxLimit(maxSticks);
+        RulesPanelEngine.syncRuleDynamicText(joinMode, maxSticks);
       }
 
       function setMaxSticksMode(newMax) {
@@ -3559,7 +3920,7 @@
           XLSX.utils.book_append_sheet(wb, wsSummary, '歷屆中獎總覽');
 
           const detailRows = [
-            ['員工編號', '員工姓名', '報到狀態', '原始出支數', '被點次數', '點過後剩餘支數', '是否本輪中獎']
+            ['員工編號', '員工姓名', '報到狀態', '原始出支數', '被點次數', '是否本輪中獎']
           ];
           const latestWinnerId = roundHistory.length > 0 ? roundHistory[roundHistory.length - 1].winnerId : '';
           roster.forEach(emp => {
@@ -3570,7 +3931,6 @@
               isLocked ? '已報到鎖定' : '未報到',
               isLocked ? emp.count : 0,
               isLocked ? emp.hits : 0,
-              isLocked ? (emp.remaining !== null ? emp.remaining : emp.count) : 0,
               (gameState === 'FINISHED' && emp.empId === latestWinnerId) ? '🏆 中獎' : ''
             ]);
           });
@@ -3752,14 +4112,10 @@
           }
         } else {
           if (emp.status === 'locked') {
-            const rem = emp.remaining !== null ? emp.remaining : emp.count;
             el.classList.add('is-revealed');
-            if (rem <= 0) {
-              el.classList.add('is-depleted');
-              statusEl.textContent = `剩 0/${emp.count}支`;
-            } else {
-              statusEl.textContent = `剩 ${rem}/${emp.count}支`;
-            }
+            statusEl.textContent = emp.hits > 0
+              ? `出 ${emp.count}支｜點${emp.hits}`
+              : `出 ${emp.count} 支`;
           } else {
             el.classList.add('is-absent');
             statusEl.textContent = '未報到';
@@ -4003,7 +4359,7 @@
           if (!shouldSendGeneral && !isMeHit) return;
           try {
             if (isMeHit) {
-              sub.conn.send({ ...msg, isMeHit: true, myRemaining: hitEmpRemaining });
+              sub.conn.send({ ...msg, isMeHit: true, myHits: hitEmpRemaining });
             } else {
               sub.conn.send(msg);
             }
@@ -4151,8 +4507,8 @@
         });
       }
 
-      /* ---------------- 換位引擎（最後 40% 洗牌 & 最後 10% 動態換位，高效能零重排） ---------------- */
-      function performFullShuffle() {
+      /* ---------------- 換位引擎（開局洗牌、最後 40% 洗牌 & 最後 10% 動態換位，高效能零重排） ---------------- */
+      function shuffleActiveOrderInDom(showFlash = true) {
         if (activePlayers.length < 2) return;
         for (let i = activePlayers.length - 1; i > 0; i--) {
           const j = Math.floor(Math.random() * (i + 1));
@@ -4160,9 +4516,6 @@
           activePlayers[i] = activePlayers[j];
           activePlayers[j] = temp;
         }
-        // 同步重建 alivePlayers 順序
-        alivePlayers = activePlayers.filter(e => e.remaining > 0);
-        cursorIdx = -1;
 
         const gridEl = document.getElementById('stageGrid');
         const isPerf = roster.length > PERF_MODE_THRESHOLD;
@@ -4172,7 +4525,7 @@
         for (let i = 0; i < activePlayers.length; i++) {
           const refs = tileElMap.get(activePlayers[i].empId);
           if (refs) {
-            if (!isPerf) refs.tile.classList.add('is-swapped');
+            if (showFlash && !isPerf) refs.tile.classList.add('is-swapped');
             frag.appendChild(refs.tile);
           }
         }
@@ -4183,7 +4536,7 @@
           }
         }
         gridEl.appendChild(frag);
-        if (!isPerf) {
+        if (showFlash && !isPerf) {
           setTimeout(() => {
             for (let i = 0; i < activePlayers.length; i++) {
               const refs = tileElMap.get(activePlayers[i].empId);
@@ -4191,23 +4544,28 @@
             }
           }, 380);
         }
+      }
 
+      function performFullShuffle() {
+        if (activePlayers.length < 2) return;
+        shuffleActiveOrderInDom(true);
+        cursorIdx = Math.floor(Math.random() * activePlayers.length) - 1;
         AudioEngine.playReveal();
         addLog('🔀 已執行全場隨機換位洗牌！', 'warn');
         showToast('🔀 全場參賽者已隨機換位完成！');
       }
 
       function performDynamicSwapStep() {
-        if (alivePlayers.length < 2) return;
+        if (activePlayers.length < 2) return;
 
-        const a = Math.floor(Math.random() * alivePlayers.length);
-        let b = Math.floor(Math.random() * alivePlayers.length);
-        if (a === b) b = (a + 1) % alivePlayers.length;
+        const a = Math.floor(Math.random() * activePlayers.length);
+        let b = Math.floor(Math.random() * activePlayers.length);
+        if (a === b) b = (a + 1) % activePlayers.length;
 
-        const empA = alivePlayers[a];
-        const empB = alivePlayers[b];
-        alivePlayers[a] = empB;
-        alivePlayers[b] = empA;
+        const empA = activePlayers[a];
+        const empB = activePlayers[b];
+        activePlayers[a] = empB;
+        activePlayers[b] = empA;
 
         const refsA = tileElMap.get(empA.empId);
         const refsB = tileElMap.get(empB.empId);
@@ -4241,13 +4599,13 @@
           return;
         }
 
-        // 開始數支時自動收起等待中的手掌表演，避免遮擋 200 人舞台（仍可隨時手動打開）
+        // 開始數支時自動收起手掌表演與遊戲說明，避免遮擋舞台（仍可隨時手動打開）
         HandDemoEngine.setVisible(false, false);
+        RulesPanelEngine.setVisible(false, false);
 
         gameState = 'PLAYING';
         isPaused = false;
         currentStick = 0;
-        cursorIdx = -1;
         asked40 = false;
         asked10 = false;
         dynamicShuffleActive = false;
@@ -4258,7 +4616,13 @@
           emp.remaining = emp.count;
           emp.hits = 0;
         });
-        alivePlayers = activePlayers.slice();
+
+        // 開局隨機排位＋隨機起點（傳統不淘汰數支規則，確保每人中獎機率完全均等）
+        shuffleActiveOrderInDom(true);
+        const startIdx = Math.floor(Math.random() * activePlayers.length);
+        const startEmp = activePlayers[startIdx];
+        cursorIdx = startIdx - 1;
+
         totalSticks = activePlayers.reduce((sum, emp) => sum + emp.count, 0);
         document.getElementById('nudgeBanner').classList.add('hidden');
         document.getElementById('dynShuffleBadge').classList.add('hidden');
@@ -4267,23 +4631,32 @@
         updateHostHUD();
         AudioEngine.playReveal();
 
+        // 預先點亮開局隨機起點光標，增加起跑儀式感
+        const startRefs = tileElMap.get(startEmp.empId);
+        if (startRefs && startRefs.tile) {
+          startRefs.tile.classList.add('is-cursor');
+          lastCursorTileEl = startRefs.tile;
+        }
+
         const pill = document.getElementById('liveCounterPill');
         pill.classList.remove('hidden');
         document.getElementById('liveCounterNum').textContent = `0 / ${totalSticks}`;
-        document.getElementById('liveCounterTarget').textContent = `全場 ${activePlayers.length} 人參戰・翻牌完成！`;
+        document.getElementById('liveCounterTarget').textContent = `🎯 隨機排位完成・起點：${startEmp.empId} ${startEmp.name}`;
         document.getElementById('slowMoBadge').classList.add('hidden');
 
-        addLog(`🚀 鎖定名單！共 ${activePlayers.length} 人參戰（上限 ${maxSticks} 支），全場總支數 ${totalSticks} 支，開始動態數支！`, 'ok');
+        addLog(`🚀 開局隨機排位完成！共 ${activePlayers.length} 人參戰、總支數 ${totalSticks} 支，隨機起點：${startEmp.empId} ${startEmp.name}`, 'ok');
         broadcastToSubscribers({
           type: 'GAME_START',
           totalSticks,
           activeCount: activePlayers.length,
-          maxSticks
+          maxSticks,
+          startEmpId: startEmp.empId,
+          startEmpName: startEmp.name
         }, true);
 
         countingTimer = setTimeout(() => {
           if (gameState === 'PLAYING' && !isPaused) stepOneStick();
-        }, 1000);
+        }, 1100);
       }
 
       function stepOneStick() {
@@ -4293,9 +4666,10 @@
           performDynamicSwapStep();
         }
 
-        if (alivePlayers.length === 0) return;
-        cursorIdx = (cursorIdx + 1) % alivePlayers.length;
-        const emp = alivePlayers[cursorIdx];
+        if (activePlayers.length === 0) return;
+        // 傳統不淘汰數支：繞全場依序循環數完總支數，不因個人支數歸零而跳過
+        cursorIdx = (cursorIdx + 1) % activePlayers.length;
+        const emp = activePlayers[cursorIdx];
 
         currentStick++;
         const remainingGlobal = totalSticks - currentStick;
@@ -4303,11 +4677,6 @@
         const isInSlowMo = slowMoChecked && remainingGlobal <= 20;
 
         emp.hits++;
-        emp.remaining--;
-        if (emp.remaining <= 0) {
-          alivePlayers.splice(cursorIdx, 1);
-          cursorIdx--; // 讓下一輪 (cursorIdx + 1) 精準指向原本的下一位
-        }
         updateSingleTile(emp);
 
         if (lastCursorTileEl) lastCursorTileEl.classList.remove('is-cursor');
@@ -4325,7 +4694,7 @@
         }
 
         document.getElementById('liveCounterNum').textContent = `${currentStick} / ${totalSticks}`;
-        document.getElementById('liveCounterTarget').textContent = `${emp.empId} ${emp.name}（剩 ${emp.remaining}/${emp.count} 支）`;
+        document.getElementById('liveCounterTarget').textContent = `${emp.empId} ${emp.name}（原出 ${emp.count} 支｜點第 ${emp.hits} 次）`;
         document.getElementById('slowMoBadge').classList.toggle('hidden', !isInSlowMo);
 
         AudioEngine.playTick(isInSlowMo, remainingGlobal);
@@ -4335,11 +4704,11 @@
           totalSticks,
           targetEmpId: emp.empId,
           targetName: emp.name,
-          targetRemaining: emp.remaining,
+          targetHits: emp.hits,
           targetCount: emp.count,
           isSlowMo: isInSlowMo,
           dynamicShuffle: dynamicShuffleActive
-        }, isInSlowMo, emp.empId, emp.remaining);
+        }, isInSlowMo, emp.empId, emp.hits);
 
         if (currentStick >= totalSticks) {
           finishCounting(emp);
@@ -4437,9 +4806,9 @@
         document.getElementById('winnerEmpId').textContent = winnerEmp.empId;
         document.getElementById('winnerEmpName').textContent = winnerEmp.name;
         document.getElementById('winnerMeta').textContent =
-          `出支上限：${maxSticks} 支 ｜ 全場總支數：${totalSticks} 支（全員已 100% 數完歸零）｜ 中獎者原出：${winnerEmp.count} 支`;
+          `出支上限：${maxSticks} 支 ｜ 全場總支數：${totalSticks} 支（隨機起點・不淘汰輪數）｜ 中獎者原出：${winnerEmp.count} 支（共點到 ${winnerEmp.hits} 次）`;
         openModal('winnerModal');
-        addLog(`🏆 本輪中獎者揭曉：${winnerEmp.empId} ${winnerEmp.name}（停在第 ${totalSticks} 支，全員已數完）`, 'ok');
+        addLog(`🏆 本輪中獎者揭曉：${winnerEmp.empId} ${winnerEmp.name}（停在第 ${totalSticks} 支）`, 'ok');
       }
 
       function resetRoundState(silent = false) {
@@ -4483,6 +4852,9 @@
         if (HandDemoEngine.isUserPreferredVisible()) {
           HandDemoEngine.setVisible(true, false);
         }
+        if (RulesPanelEngine.isUserPreferredVisible()) {
+          RulesPanelEngine.setVisible(true, false);
+        }
 
         if (!silent) {
           showToast('🔄 已開啟全新一輪！員工清冊已保留，重新開放掃碼');
@@ -4515,6 +4887,11 @@
       // 出支上限切換按鈕（5 支 / 10 支）
       document.getElementById('btnMode5Sticks').addEventListener('click', () => setMaxSticksMode(5));
       document.getElementById('btnMode10Sticks').addEventListener('click', () => setMaxSticksMode(10));
+
+      // 完整遊戲說明視窗控制按鈕（隨時顯示／隱藏／切換大小）
+      document.getElementById('btnToggleRulesPanel').addEventListener('click', () => RulesPanelEngine.toggleVisible());
+      document.getElementById('btnHideRulesPanel').addEventListener('click', () => RulesPanelEngine.setVisible(false, true));
+      document.getElementById('btnRulesSize').addEventListener('click', () => RulesPanelEngine.cycleSize());
 
       // 手掌表演示意控制按鈕（隨時顯示／隱藏／切換節奏／點擊換手勢）
       document.getElementById('btnToggleHandDemo').addEventListener('click', () => HandDemoEngine.toggleVisible());
@@ -4777,6 +5154,7 @@
       // 初始化啟動
       setSpeedMs(22);
       HandDemoEngine.init(maxSticks);
+      RulesPanelEngine.init(joinMode, maxSticks);
       syncJoinModeUI();
       syncMaxSticksUI();
       loadRosterFromStorage();
@@ -4969,15 +5347,10 @@
         const wrap = document.getElementById('playerMyCountStatus');
         const label = document.getElementById('playerMyLabel');
         const remEl = document.getElementById('playerMyRemainText');
-        const rem = myRemainingSticks !== null ? myRemainingSticks : lockedSession.count;
+        const hits = myRemainingSticks || 0;
+        wrap.classList.remove('is-zero');
         label.textContent = `${lockedSession.name} (${lockedSession.empId})`;
-        if (rem <= 0) {
-          wrap.classList.add('is-zero');
-          remEl.textContent = `已歸零 (0/${lockedSession.count} 支)`;
-        } else {
-          wrap.classList.remove('is-zero');
-          remEl.textContent = `剩 ${rem} / ${lockedSession.count} 支`;
-        }
+        remEl.textContent = `出 ${lockedSession.count} 支｜已點 ${hits} 次`;
       }
 
       function handleLiveEvent(msg) {
@@ -4994,7 +5367,10 @@
           document.getElementById('playerCountingNum').textContent = '0';
           document.getElementById('playerCountingTotal').textContent = `/ ${msg.totalSticks} 支`;
           document.getElementById('playerCountingBar').style.width = '0%';
-          document.getElementById('playerCountingSpotlight').textContent = `全場 ${msg.activeCount} 人參戰・翻牌完成！`;
+          myRemainingSticks = 0;
+          document.getElementById('playerCountingSpotlight').textContent = msg.startEmpName
+            ? `🎯 隨機起點：${msg.startEmpId} ${msg.startEmpName}（全場 ${msg.activeCount} 人）`
+            : `全場 ${msg.activeCount} 人參戰・隨機排位起跑！`;
           document.getElementById('playerSlowMoBadge').classList.add('hidden');
           document.getElementById('playerDynShuffleBadge').classList.add('hidden');
           updatePlayerMyStatusUI();
@@ -5010,14 +5386,14 @@
           document.getElementById('playerCountingTotal').textContent = `/ ${msg.totalSticks} 支`;
           document.getElementById('playerCountingBar').style.width = `${pct.toFixed(1)}%`;
           document.getElementById('playerCountingSpotlight').textContent =
-            `⚡ 目前數到：${msg.targetEmpId} ${msg.targetName}（剩 ${msg.targetRemaining}/${msg.targetCount} 支）`;
+            `⚡ 目前數到：${msg.targetEmpId} ${msg.targetName}（原出 ${msg.targetCount} 支）`;
 
           countBox.classList.toggle('is-slowmo', Boolean(msg.isSlowMo));
           document.getElementById('playerSlowMoBadge').classList.toggle('hidden', !msg.isSlowMo);
           document.getElementById('playerDynShuffleBadge').classList.toggle('hidden', !msg.dynamicShuffle);
 
           if (msg.isMeHit) {
-            myRemainingSticks = msg.myRemaining;
+            myRemainingSticks = msg.myHits || 0;
             updatePlayerMyStatusUI();
             countBox.classList.remove('is-me-hit');
             void countBox.offsetWidth;
@@ -5118,7 +5494,7 @@
           if (resp.status === 'OK') {
             safeSetStorage(STORAGE_PLAYER_EMP_KEY, resp.empId);
             lockedSession = { empId: resp.empId, name: resp.name, count: resp.count };
-            myRemainingSticks = resp.count;
+            myRemainingSticks = 0;
             document.getElementById('playerFormArea').classList.add('hidden');
             document.getElementById('playerWinnerBox').classList.add('hidden');
             document.getElementById('playerCountingBox').classList.add('hidden');
