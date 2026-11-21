@@ -1,0 +1,4668 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>線上動態數支大作戰｜無人數上限即時掃碼驗證與大螢幕展示系統</title>
+
+  <!-- 穩定 HTTPS CDN：QRCode.js、PeerJS、SheetJS、PapaParse -->
+  <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+
+  <style>
+    :root {
+      --bg-dark: #070b18;
+      --bg-panel: rgba(15, 23, 42, 0.9);
+      --border-subtle: rgba(148, 163, 184, 0.22);
+      --gold: #fbbf24;
+      --gold-bright: #fef08a;
+      --gold-dark: #b45309;
+      --cyan: #22d3ee;
+      --emerald: #10b981;
+      --rose: #f43f5e;
+      --amber: #f59e0b;
+      --purple: #a855f7;
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+      --font-sans: "Microsoft JhengHei", "PingFang TC", "Noto Sans TC", system-ui, -apple-system, sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    html, body {
+      width: 100%;
+      height: 100%;
+      font-family: var(--font-sans);
+      color: var(--text-main);
+      background: radial-gradient(circle at 25% 20%, #172554 0%, #090e1f 55%, #04060e 100%);
+    }
+
+    body.host-mode {
+      overflow: hidden;
+      user-select: none;
+    }
+
+    body.player-mode {
+      overflow-y: auto;
+      min-height: 100vh;
+    }
+
+    .hidden {
+      display: none !important;
+    }
+
+    /* ==========================================================================
+       主持端（1920×1080 大螢幕無捲軸滿版）
+       ========================================================================== */
+    #hostView {
+      width: 100vw;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      position: relative;
+    }
+
+    /* 頂部資訊列 */
+    .host-header {
+      min-height: 58px;
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      padding: 6px 14px;
+      background: rgba(7, 11, 24, 0.92);
+      border-bottom: 1px solid rgba(251, 191, 36, 0.3);
+      backdrop-filter: blur(8px);
+      z-index: 20;
+      gap: 6px 10px;
+    }
+
+    .brand-area {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-shrink: 0;
+    }
+
+    .brand-title {
+      font-size: 18px;
+      font-weight: 900;
+      letter-spacing: 1px;
+      background: linear-gradient(90deg, #fff7cc, #fbbf24, #f59e0b);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      cursor: text;
+      outline: none;
+      padding: 2px 6px;
+      border-radius: 6px;
+      border: 1px solid transparent;
+      white-space: nowrap;
+    }
+
+    .brand-title:focus {
+      border-color: var(--gold);
+      background: rgba(0, 0, 0, 0.5);
+      -webkit-text-fill-color: #fff7cc;
+    }
+
+    .conn-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 9px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 700;
+      background: rgba(15, 23, 42, 0.9);
+      border: 1px solid var(--border-subtle);
+      white-space: nowrap;
+    }
+
+    .conn-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--amber);
+      box-shadow: 0 0 8px var(--amber);
+    }
+
+    .conn-dot.online {
+      background: var(--emerald);
+      box-shadow: 0 0 10px var(--emerald);
+    }
+
+    .conn-dot.error {
+      background: var(--rose);
+      box-shadow: 0 0 10px var(--rose);
+    }
+
+    .hud-stats {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 6px;
+      flex-shrink: 0;
+    }
+
+    .stat-chip {
+      background: rgba(30, 41, 59, 0.75);
+      border: 1px solid rgba(148, 163, 184, 0.25);
+      border-radius: 9px;
+      padding: 4px 10px;
+      display: flex;
+      align-items: baseline;
+      gap: 5px;
+      font-size: 12px;
+      color: var(--text-muted);
+      white-space: nowrap;
+    }
+
+    .stat-chip strong {
+      font-size: 17px;
+      font-weight: 900;
+      color: var(--text-main);
+      font-variant-numeric: tabular-nums;
+    }
+
+    .stat-chip.highlight-gold {
+      border-color: rgba(251, 191, 36, 0.55);
+      background: rgba(120, 53, 15, 0.35);
+    }
+
+    .stat-chip.highlight-gold strong {
+      color: var(--gold-bright);
+    }
+
+    .stat-chip.highlight-cyan {
+      border-color: rgba(34, 211, 238, 0.55);
+      background: rgba(8, 51, 68, 0.45);
+    }
+
+    .stat-chip.highlight-cyan strong {
+      color: var(--cyan);
+    }
+
+    .header-actions {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      flex-wrap: wrap;
+      flex-shrink: 0;
+    }
+
+    .btn {
+      padding: 6px 10px;
+      border-radius: 8px;
+      border: 1px solid var(--border-subtle);
+      background: rgba(30, 41, 59, 0.85);
+      color: var(--text-main);
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+      white-space: nowrap;
+    }
+
+    .btn:hover:not(:disabled) {
+      border-color: var(--gold);
+      background: rgba(51, 65, 85, 0.95);
+      transform: translateY(-1px);
+    }
+
+    .btn:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+    }
+
+    .btn-gold {
+      background: linear-gradient(135deg, #fbbf24, #d97706);
+      color: #1c0f00;
+      border-color: #fef08a;
+      box-shadow: 0 0 14px rgba(251, 191, 36, 0.35);
+    }
+
+    .btn-gold:hover:not(:disabled) {
+      background: linear-gradient(135deg, #fde047, #ea580c);
+      color: #1c0f00;
+    }
+
+    .btn-danger {
+      background: rgba(159, 18, 57, 0.65);
+      border-color: rgba(244, 63, 94, 0.6);
+      color: #ffe4e6;
+    }
+
+    .btn-danger:hover:not(:disabled) {
+      background: rgba(225, 29, 72, 0.85);
+    }
+
+    .btn-emerald {
+      background: linear-gradient(135deg, #10b981, #047857);
+      border-color: #6ee7b7;
+      color: #ffffff;
+    }
+
+    .btn-purple {
+      background: linear-gradient(135deg, #9333ea, #6b21a8);
+      border-color: #d8b4fe;
+      color: #ffffff;
+    }
+
+    .btn-cyan {
+      background: linear-gradient(135deg, #0891b2, #0e7490);
+      border-color: #67e8f9;
+      color: #ffffff;
+    }
+
+    /* 主體雙欄：左舞台 + 右側控制與 QR 面板 */
+    .host-main {
+      flex: 1;
+      display: grid;
+      grid-template-columns: 1fr 375px;
+      min-height: 0;
+      overflow: hidden;
+    }
+
+    /* 左側 200 人動態數支舞台 */
+    .stage-area {
+      position: relative;
+      padding: 10px 12px;
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+      overflow: hidden;
+    }
+
+    .stage-grid-wrap {
+      flex: 1;
+      min-height: 0;
+      display: grid;
+      gap: 5px;
+      align-content: stretch;
+      justify-content: stretch;
+      overflow: hidden;
+    }
+
+    /* 多人高效能模式（> 240 人自動啟用：可捲動且關閉重繪過渡與陰影，避免大場次卡頓） */
+    .stage-grid-wrap.perf-mode {
+      overflow-y: auto;
+      align-content: start;
+      gap: 4px;
+      padding-right: 4px;
+    }
+
+    .stage-grid-wrap.perf-mode .emp-tile {
+      min-height: 44px;
+      transition: none;
+      box-shadow: none;
+      contain: layout style paint;
+      content-visibility: auto;
+      contain-intrinsic-size: 72px 44px;
+    }
+
+    .stage-grid-wrap.perf-mode .emp-tile.is-cursor {
+      transform: scale(1.06);
+      box-shadow: 0 0 12px rgba(251, 191, 36, 0.9);
+    }
+
+    .stage-grid-wrap.perf-mode .emp-tile.is-winner {
+      transform: scale(1.1);
+      box-shadow: 0 0 24px rgba(254, 240, 138, 0.95);
+    }
+
+    .empty-stage-placeholder {
+      position: absolute;
+      inset: 22px;
+      border: 2px dashed rgba(148, 163, 184, 0.3);
+      border-radius: 18px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 14px;
+      background: rgba(15, 23, 42, 0.45);
+      text-align: center;
+      padding: 24px;
+      z-index: 5;
+    }
+
+    .empty-stage-placeholder h2 {
+      font-size: 28px;
+      color: var(--gold-bright);
+    }
+
+    .empty-stage-placeholder p {
+      color: var(--text-muted);
+      font-size: 16px;
+      max-width: 580px;
+      line-height: 1.6;
+    }
+
+    /* ==========================================================================
+       等待中動態手掌表演示意視窗（可隨時隱藏／切換大小／自由拖曳移動）
+       ========================================================================== */
+    .hand-demo-stage {
+      position: absolute;
+      right: 18px;
+      bottom: 18px;
+      z-index: 22;
+      width: 390px;
+      max-width: calc(100% - 20px);
+      background: linear-gradient(155deg, rgba(15, 23, 42, 0.94), rgba(30, 27, 75, 0.92));
+      border: 1.5px solid rgba(251, 191, 36, 0.6);
+      border-radius: 18px;
+      padding: 12px 14px 14px;
+      box-shadow: 0 14px 40px rgba(0, 0, 0, 0.72), 0 0 28px rgba(251, 191, 36, 0.22);
+      backdrop-filter: blur(10px);
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      transition: width 0.22s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+      touch-action: none;
+    }
+
+    .hand-demo-stage.is-dragging {
+      transition: none;
+      border-color: var(--cyan);
+      box-shadow: 0 20px 52px rgba(0, 0, 0, 0.85), 0 0 34px rgba(34, 211, 238, 0.45);
+      z-index: 40;
+    }
+
+    /* 四段畫面大小切換（小 / 中 / 大 / 特大） */
+    .hand-demo-stage.size-sm {
+      width: 300px;
+      padding: 9px 11px 10px;
+    }
+    .hand-demo-stage.size-sm .hands-arena { height: 114px; gap: 8px; }
+    .hand-demo-stage.size-sm .hand-svg { width: 92px; height: 102px; }
+    .hand-demo-stage.size-sm .hand-demo-count { font-size: 17px; }
+    .hand-demo-stage.size-sm .hand-demo-caption { font-size: 11px; }
+    .hand-demo-stage.size-sm .hand-demo-mode-tag { display: none; }
+
+    .hand-demo-stage.size-md {
+      width: 390px;
+    }
+    .hand-demo-stage.size-md .hands-arena { height: 158px; }
+    .hand-demo-stage.size-md .hand-svg { width: 132px; height: 146px; }
+
+    .hand-demo-stage.size-lg {
+      width: 540px;
+      padding: 14px 16px 16px;
+    }
+    .hand-demo-stage.size-lg .hands-arena { height: 230px; gap: 22px; }
+    .hand-demo-stage.size-lg .hand-svg { width: 192px; height: 212px; }
+    .hand-demo-stage.size-lg .hand-demo-count { font-size: 28px; }
+    .hand-demo-stage.size-lg .hand-demo-caption { font-size: 14px; }
+
+    .hand-demo-stage.size-xl {
+      width: 720px;
+      padding: 16px 20px 18px;
+    }
+    .hand-demo-stage.size-xl .hands-arena { height: 310px; gap: 32px; }
+    .hand-demo-stage.size-xl .hand-svg { width: 256px; height: 282px; }
+    .hand-demo-stage.size-xl .hand-demo-count { font-size: 36px; }
+    .hand-demo-stage.size-xl .hand-demo-caption { font-size: 16px; }
+
+    .hand-demo-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 6px;
+      border-bottom: 1px solid rgba(148, 163, 184, 0.2);
+      padding-bottom: 7px;
+      cursor: grab;
+      user-select: none;
+    }
+
+    .hand-demo-stage.is-dragging .hand-demo-header {
+      cursor: grabbing;
+    }
+
+    .drag-grip {
+      color: var(--text-muted);
+      font-size: 13px;
+      letter-spacing: -1px;
+      opacity: 0.85;
+    }
+
+    .hand-demo-title {
+      font-size: 13px;
+      font-weight: 900;
+      color: var(--gold-bright);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .hand-demo-controls {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+
+    .hand-demo-body {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 6px;
+      cursor: pointer;
+    }
+
+    .hands-arena {
+      display: flex;
+      align-items: flex-end;
+      justify-content: center;
+      gap: 14px;
+      height: 158px;
+      width: 100%;
+      padding: 6px 8px 2px;
+      border-radius: 14px;
+      background: radial-gradient(circle at 50% 65%, rgba(34, 211, 238, 0.16), rgba(2, 6, 23, 0.65));
+      border: 1px solid rgba(34, 211, 238, 0.22);
+      overflow: hidden;
+      position: relative;
+    }
+
+    .hand-svg-wrap {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      animation: handFloat 1.9s ease-in-out infinite;
+      transform-origin: center bottom;
+    }
+
+    .hand-svg-wrap.right-hand {
+      animation-delay: 0.35s;
+    }
+
+    .hand-svg-wrap.pulse-pop {
+      animation: handPop 0.38s cubic-bezier(0.22, 1.3, 0.36, 1);
+    }
+
+    @keyframes handFloat {
+      0%, 100% { transform: translateY(0px) rotate(-1.5deg); }
+      50% { transform: translateY(-6px) rotate(1.5deg); }
+    }
+
+    @keyframes handPop {
+      0% { transform: scale(0.92) translateY(4px); }
+      55% { transform: scale(1.07) translateY(-6px); }
+      100% { transform: scale(1) translateY(0); }
+    }
+
+    .hand-svg {
+      width: 132px;
+      height: 146px;
+      overflow: visible;
+      filter: drop-shadow(0 6px 14px rgba(0, 0, 0, 0.55));
+    }
+
+    .hand-svg.mirrored {
+      transform: scaleX(-1);
+    }
+
+    /* 手指伸展與收起平滑動畫 */
+    .finger-group {
+      transform-box: fill-box;
+      transform-origin: 50% 92%;
+      transition: transform 0.28s cubic-bezier(0.22, 1.25, 0.36, 1), opacity 0.22s ease;
+    }
+
+    .finger-group.is-up {
+      transform: scaleY(1) translateY(0px);
+    }
+
+    .finger-group.is-up .finger-fill {
+      fill: url(#fingerUpGrad);
+      stroke: #fef08a;
+    }
+
+    .finger-group.is-down {
+      transform: scaleY(0.36) translateY(26px);
+      opacity: 0.62;
+    }
+
+    .finger-group.is-down .finger-fill {
+      fill: #334155;
+      stroke: #64748b;
+    }
+
+    /* 拇指專屬收展 */
+    .thumb-group {
+      transform-box: fill-box;
+      transform-origin: 85% 80%;
+      transition: transform 0.28s cubic-bezier(0.22, 1.25, 0.36, 1), opacity 0.22s ease;
+    }
+
+    .thumb-group.is-up {
+      transform: rotate(0deg) scale(1);
+    }
+
+    .thumb-group.is-up .finger-fill {
+      fill: url(#fingerUpGrad);
+      stroke: #fef08a;
+    }
+
+    .thumb-group.is-down {
+      transform: rotate(42deg) translate(12px, 10px) scale(0.76);
+      opacity: 0.62;
+    }
+
+    .thumb-group.is-down .finger-fill {
+      fill: #334155;
+      stroke: #64748b;
+    }
+
+    .hand-demo-readout {
+      width: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      padding: 6px 10px;
+      border-radius: 10px;
+      background: rgba(2, 6, 23, 0.65);
+      border: 1px solid rgba(251, 191, 36, 0.25);
+    }
+
+    .hand-demo-count {
+      font-size: 22px;
+      font-weight: 900;
+      color: var(--gold-bright);
+      font-variant-numeric: tabular-nums;
+      white-space: nowrap;
+    }
+
+    .hand-demo-caption {
+      font-size: 12px;
+      font-weight: 700;
+      color: #cbd5e1;
+      line-height: 1.35;
+      text-align: right;
+    }
+
+    /* 員工卡片格子（自適應縮放） */
+    .emp-tile {
+      position: relative;
+      background: rgba(15, 23, 42, 0.74);
+      border: 1px solid rgba(148, 163, 184, 0.22);
+      border-radius: 7px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 2px 3px;
+      overflow: hidden;
+      transition: transform 0.08s ease, border-color 0.12s ease, background 0.12s ease, box-shadow 0.12s ease;
+    }
+
+    .emp-tile.is-locked {
+      background: linear-gradient(160deg, rgba(6, 78, 59, 0.78), rgba(15, 23, 42, 0.92));
+      border-color: rgba(16, 185, 129, 0.75);
+      box-shadow: inset 0 0 10px rgba(16, 185, 129, 0.2);
+      cursor: pointer;
+    }
+
+    .emp-tile.is-locked:hover::after {
+      content: "點擊釋放";
+      position: absolute;
+      inset: 0;
+      background: rgba(159, 18, 57, 0.88);
+      color: #fff;
+      font-size: 11px;
+      font-weight: 800;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .emp-tile.is-revealed {
+      background: linear-gradient(160deg, rgba(30, 58, 138, 0.8), rgba(15, 23, 42, 0.95));
+      border-color: rgba(56, 189, 248, 0.72);
+      cursor: default;
+    }
+
+    .emp-tile.is-revealed:hover::after {
+      display: none;
+    }
+
+    .emp-tile.is-depleted {
+      background: linear-gradient(160deg, rgba(51, 65, 85, 0.55), rgba(15, 23, 42, 0.92));
+      border-color: rgba(148, 163, 184, 0.35);
+      opacity: 0.62;
+    }
+
+    .emp-tile.is-depleted .emp-status {
+      color: #94a3b8 !important;
+    }
+
+    .emp-tile.is-absent {
+      opacity: 0.22;
+      filter: grayscale(0.85);
+    }
+
+    .emp-tile.is-swapped {
+      animation: swapFlash 0.35s ease;
+    }
+
+    @keyframes swapFlash {
+      0% { box-shadow: 0 0 0 2px #c084fc; transform: scale(0.92); }
+      50% { box-shadow: 0 0 18px #c084fc; transform: scale(1.06); }
+      100% { box-shadow: none; transform: scale(1); }
+    }
+
+    .emp-tile.is-cursor {
+      background: linear-gradient(135deg, #fbbf24 0%, #f97316 100%) !important;
+      border-color: #ffffff !important;
+      color: #1c0f00 !important;
+      opacity: 1 !important;
+      transform: scale(1.13);
+      z-index: 15;
+      box-shadow: 0 0 22px rgba(251, 191, 36, 0.95), 0 0 40px rgba(249, 115, 22, 0.65);
+    }
+
+    .emp-tile.is-cursor .emp-id,
+    .emp-tile.is-cursor .emp-name,
+    .emp-tile.is-cursor .emp-status {
+      color: #1c0f00 !important;
+    }
+
+    .emp-tile.is-winner {
+      background: linear-gradient(135deg, #fef08a 0%, #f59e0b 55%, #ea580c 100%) !important;
+      border: 2px solid #ffffff !important;
+      opacity: 1 !important;
+      transform: scale(1.18);
+      z-index: 18;
+      box-shadow: 0 0 35px rgba(254, 240, 138, 1), 0 0 65px rgba(245, 158, 11, 0.9);
+      animation: winnerPulse 0.8s ease-in-out infinite alternate;
+    }
+
+    .emp-tile.is-winner .emp-id,
+    .emp-tile.is-winner .emp-name,
+    .emp-tile.is-winner .emp-status {
+      color: #1c0f00 !important;
+    }
+
+    @keyframes winnerPulse {
+      from { transform: scale(1.15); }
+      to { transform: scale(1.23); }
+    }
+
+    .emp-id {
+      font-weight: 800;
+      color: var(--cyan);
+      line-height: 1.08;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 100%;
+    }
+
+    .emp-name {
+      font-weight: 900;
+      color: var(--text-main);
+      line-height: 1.12;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 100%;
+    }
+
+    .emp-status {
+      font-weight: 800;
+      color: var(--text-muted);
+      line-height: 1.08;
+      white-space: nowrap;
+    }
+
+    .emp-tile.is-locked .emp-status {
+      color: #6ee7b7;
+    }
+
+    .emp-tile.is-revealed .emp-status {
+      color: var(--gold-bright);
+    }
+
+    /* 舞台中央浮動數支大計數器（數支進行中顯示） */
+    .live-counter-pill {
+      position: absolute;
+      top: 14px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 25;
+      background: rgba(7, 11, 24, 0.94);
+      border: 2px solid var(--gold);
+      border-radius: 999px;
+      padding: 7px 24px;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.75), 0 0 24px rgba(251, 191, 36, 0.4);
+      pointer-events: none;
+      white-space: nowrap;
+    }
+
+    .live-counter-num {
+      font-size: 32px;
+      font-weight: 900;
+      color: var(--gold-bright);
+      font-variant-numeric: tabular-nums;
+    }
+
+    .live-counter-target {
+      font-size: 16px;
+      font-weight: 800;
+      color: #e2e8f0;
+    }
+
+    .slowmo-badge {
+      background: #e11d48;
+      color: #fff;
+      font-size: 12px;
+      font-weight: 900;
+      padding: 4px 10px;
+      border-radius: 999px;
+      animation: blinkFast 0.6s infinite alternate;
+    }
+
+    .dynshuffle-badge {
+      background: #9333ea;
+      color: #fff;
+      font-size: 12px;
+      font-weight: 900;
+      padding: 4px 10px;
+      border-radius: 999px;
+      animation: blinkFast 0.5s infinite alternate;
+    }
+
+    @keyframes blinkFast {
+      from { opacity: 0.7; }
+      to { opacity: 1; }
+    }
+
+    /* 重複工號提醒橫幅（防呆：請前一位退出） */
+    .nudge-banner {
+      position: absolute;
+      bottom: 16px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 28;
+      background: linear-gradient(90deg, rgba(159, 18, 57, 0.96), rgba(180, 83, 9, 0.96));
+      border: 2px solid #fde047;
+      border-radius: 14px;
+      padding: 12px 18px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      box-shadow: 0 10px 35px rgba(0, 0, 0, 0.75);
+      max-width: 92%;
+    }
+
+    .nudge-text {
+      font-size: 14px;
+      font-weight: 800;
+      color: #fffbeb;
+      line-height: 1.45;
+    }
+
+    /* 右側控制與 QR Code 側欄 */
+    .host-sidebar {
+      background: var(--bg-panel);
+      border-left: 1px solid rgba(251, 191, 36, 0.25);
+      padding: 10px 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      overflow-y: auto;
+    }
+
+    .side-card {
+      background: rgba(15, 23, 42, 0.78);
+      border: 1px solid var(--border-subtle);
+      border-radius: 12px;
+      padding: 9px 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 7px;
+      flex-shrink: 0;
+    }
+
+    .side-card-title {
+      font-size: 13px;
+      font-weight: 800;
+      color: var(--gold-bright);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 6px;
+    }
+
+    /* 出支上限切換器（5支 / 10支） */
+    .stick-mode-switch {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px;
+    }
+
+    .mode-btn {
+      padding: 7px 8px;
+      border-radius: 9px;
+      border: 1.5px solid var(--border-subtle);
+      background: rgba(30, 41, 59, 0.85);
+      color: var(--text-main);
+      font-size: 12px;
+      font-weight: 800;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 5px;
+    }
+
+    .mode-btn:hover:not(:disabled) {
+      border-color: var(--cyan);
+    }
+
+    .mode-btn.active {
+      background: linear-gradient(135deg, #22d3ee, #0284c7);
+      color: #082f49;
+      border-color: #a5f3fc;
+      box-shadow: 0 0 14px rgba(34, 211, 238, 0.38);
+    }
+
+    .mode-btn:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+    }
+
+    /* QR Code 區域與紅色封鎖遮罩 */
+    .qr-box {
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      background: #ffffff;
+      border-radius: 10px;
+      padding: 8px;
+      min-height: 172px;
+      overflow: hidden;
+    }
+
+    #qrcode {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    #qrcode img, #qrcode canvas {
+      display: block;
+      max-width: 156px;
+      height: auto;
+    }
+
+    .qr-lock-overlay {
+      position: absolute;
+      inset: 0;
+      background: rgba(15, 23, 42, 0.85);
+      backdrop-filter: blur(2px);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      padding: 14px;
+      gap: 8px;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.25s ease;
+    }
+
+    .qr-box.is-locked #qrcode {
+      filter: grayscale(1) opacity(0.26);
+    }
+
+    .qr-box.is-locked .qr-lock-overlay {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    .qr-lock-badge {
+      background: #e11d48;
+      color: #ffffff;
+      border: 2px solid #fecdd3;
+      padding: 9px 12px;
+      border-radius: 10px;
+      font-size: 14px;
+      font-weight: 900;
+      line-height: 1.4;
+      box-shadow: 0 0 24px rgba(225, 29, 72, 0.8);
+    }
+
+    .room-meta {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 12px;
+      color: var(--text-muted);
+      gap: 6px;
+    }
+
+    .room-code-text {
+      font-family: "Consolas", monospace;
+      font-size: 15px;
+      font-weight: 900;
+      color: var(--cyan);
+      letter-spacing: 1px;
+    }
+
+    /* 主開始按鈕 */
+    .btn-start-giant {
+      width: 100%;
+      padding: 12px;
+      border-radius: 12px;
+      border: 2px solid #fef08a;
+      background: linear-gradient(135deg, #fbbf24 0%, #ea580c 100%);
+      color: #1c0f00;
+      font-size: 17px;
+      font-weight: 900;
+      letter-spacing: 1px;
+      cursor: pointer;
+      box-shadow: 0 0 22px rgba(251, 191, 36, 0.42);
+      transition: transform 0.15s, box-shadow 0.2s;
+      flex-shrink: 0;
+    }
+
+    .btn-start-giant:hover:not(:disabled) {
+      transform: translateY(-2px);
+      box-shadow: 0 0 32px rgba(251, 191, 36, 0.72);
+    }
+
+    .btn-start-giant:disabled {
+      filter: grayscale(0.6);
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+
+    .btn-start-giant.is-playing {
+      background: linear-gradient(135deg, #0284c7, #1d4ed8);
+      border-color: #bae6fd;
+      color: #ffffff;
+      box-shadow: 0 0 20px rgba(56, 189, 248, 0.45);
+    }
+
+    /* 速度控制區 */
+    .speed-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .speed-row input[type="range"] {
+      flex: 1;
+      accent-color: var(--gold);
+      cursor: pointer;
+    }
+
+    .speed-presets {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 5px;
+    }
+
+    .preset-btn {
+      padding: 5px 4px;
+      border-radius: 7px;
+      border: 1px solid var(--border-subtle);
+      background: rgba(30, 41, 59, 0.85);
+      color: var(--text-main);
+      font-size: 12px;
+      font-weight: 800;
+      cursor: pointer;
+    }
+
+    .preset-btn.active {
+      background: var(--gold);
+      color: #1c0f00;
+      border-color: var(--gold-bright);
+    }
+
+    .checkbox-label {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      font-size: 12px;
+      font-weight: 700;
+      color: #e2e8f0;
+      cursor: pointer;
+    }
+
+    .checkbox-label input {
+      width: 15px;
+      height: 15px;
+      accent-color: var(--gold);
+      cursor: pointer;
+    }
+
+    /* 模擬測試集中區塊（可隱藏） */
+    .sim-card {
+      border-color: rgba(168, 85, 247, 0.45);
+      background: rgba(59, 7, 100, 0.28);
+    }
+
+    .sim-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px;
+    }
+
+    .sim-inline-form {
+      display: grid;
+      grid-template-columns: 1fr 68px auto;
+      gap: 5px;
+      align-items: center;
+    }
+
+    .sim-input {
+      width: 100%;
+      padding: 5px 8px;
+      border-radius: 7px;
+      border: 1px solid var(--border-subtle);
+      background: rgba(2, 6, 23, 0.85);
+      color: #fff;
+      font-size: 12px;
+      font-weight: 800;
+      text-transform: uppercase;
+      outline: none;
+    }
+
+    .sim-input:focus {
+      border-color: var(--purple);
+    }
+
+    /* 快速音控列 */
+    .quick-audio-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+    }
+
+    .quick-audio-row input[type="range"] {
+      flex: 1;
+      accent-color: var(--cyan);
+    }
+
+    /* 狀態日誌小區 */
+    .mini-log {
+      flex: 1;
+      min-height: 80px;
+      overflow-y: auto;
+      font-size: 11px;
+      color: var(--text-muted);
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      padding-right: 4px;
+    }
+
+    .log-item {
+      padding: 4px 7px;
+      border-radius: 6px;
+      background: rgba(255, 255, 255, 0.04);
+      line-height: 1.35;
+    }
+
+    .log-item.ok { border-left: 3px solid var(--emerald); color: #d1fae5; }
+    .log-item.warn { border-left: 3px solid var(--amber); color: #fef3c7; }
+    .log-item.err { border-left: 3px solid var(--rose); color: #ffe4e6; }
+
+    /* ==========================================================================
+       彈窗系統（清冊管理、音效設定、換位詢問、確認對話框、中獎慶祝大字報）
+       ========================================================================== */
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      z-index: 100;
+      background: rgba(2, 6, 23, 0.82);
+      backdrop-filter: blur(6px);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+
+    .modal-backdrop.open {
+      display: flex;
+    }
+
+    .modal-box {
+      width: min(760px, 95vw);
+      max-height: 90vh;
+      overflow-y: auto;
+      background: #0f172a;
+      border: 1px solid rgba(251, 191, 36, 0.5);
+      border-radius: 18px;
+      padding: 22px 24px;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.72);
+      display: flex;
+      flex-direction: column;
+      gap: 15px;
+    }
+
+    .modal-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid var(--border-subtle);
+      padding-bottom: 12px;
+    }
+
+    .modal-header h3 {
+      font-size: 20px;
+      font-weight: 900;
+      color: var(--gold-bright);
+    }
+
+    .modal-close-btn {
+      width: 34px;
+      height: 34px;
+      border-radius: 50%;
+      border: 1px solid var(--border-subtle);
+      background: rgba(255, 255, 255, 0.08);
+      color: #fff;
+      font-size: 18px;
+      cursor: pointer;
+    }
+
+    .modal-section {
+      background: rgba(30, 41, 59, 0.55);
+      border: 1px solid var(--border-subtle);
+      border-radius: 12px;
+      padding: 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .modal-section h4 {
+      font-size: 15px;
+      color: var(--cyan);
+    }
+
+    .btn-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+    }
+
+    textarea.paste-area {
+      width: 100%;
+      height: 150px;
+      border-radius: 10px;
+      border: 1px solid var(--border-subtle);
+      background: rgba(2, 6, 23, 0.85);
+      color: #f8fafc;
+      padding: 10px 12px;
+      font-family: "Consolas", var(--font-sans);
+      font-size: 14px;
+      resize: vertical;
+      outline: none;
+    }
+
+    textarea.paste-area:focus {
+      border-color: var(--gold);
+    }
+
+    /* 音效設定表格 */
+    .audio-track-row {
+      display: grid;
+      grid-template-columns: 125px 1fr auto auto auto;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 10px;
+      border-radius: 10px;
+      background: rgba(2, 6, 23, 0.5);
+      border: 1px solid rgba(148, 163, 184, 0.15);
+    }
+
+    .audio-status-text {
+      font-size: 12px;
+      color: var(--text-muted);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    /* 換位詢問與確認彈窗 */
+    .prompt-modal {
+      width: min(560px, 92vw);
+      background: radial-gradient(circle at 50% 15%, #1e1b4b 0%, #0f172a 75%);
+      border: 2px solid var(--gold);
+      border-radius: 22px;
+      padding: 30px 26px;
+      text-align: center;
+      box-shadow: 0 0 60px rgba(168, 85, 247, 0.55);
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      animation: popWinner 0.3s ease;
+    }
+
+    .prompt-modal h3 {
+      font-size: 26px;
+      font-weight: 900;
+      color: var(--gold-bright);
+    }
+
+    .prompt-modal p {
+      font-size: 15px;
+      color: #e2e8f0;
+      line-height: 1.65;
+      white-space: pre-line;
+    }
+
+    /* 中獎大字報 */
+    .winner-modal {
+      width: min(720px, 94vw);
+      background: radial-gradient(circle at 50% 25%, #451a03 0%, #1c0a00 70%, #090400 100%);
+      border: 3px solid var(--gold);
+      border-radius: 26px;
+      padding: 38px 32px;
+      text-align: center;
+      box-shadow: 0 0 80px rgba(251, 191, 36, 0.75);
+      position: relative;
+      animation: popWinner 0.45s cubic-bezier(0.18, 1.35, 0.32, 1);
+    }
+
+    @keyframes popWinner {
+      from { transform: scale(0.55); opacity: 0; }
+      to { transform: scale(1); opacity: 1; }
+    }
+
+    .winner-trophy { font-size: 62px; margin-bottom: 6px; }
+    .winner-subtitle { font-size: 22px; font-weight: 800; color: var(--gold); letter-spacing: 3px; margin-bottom: 12px; }
+    .winner-emp-id { font-size: 40px; font-weight: 900; color: var(--cyan); font-family: "Consolas", monospace; margin-bottom: 6px; }
+    .winner-emp-name {
+      font-size: 74px;
+      font-weight: 900;
+      background: linear-gradient(180deg, #ffffff 0%, #fef08a 45%, #f59e0b 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      filter: drop-shadow(0 6px 20px rgba(251, 191, 36, 0.65));
+      margin-bottom: 18px;
+      line-height: 1.15;
+    }
+    .winner-meta { font-size: 17px; color: #fde68a; margin-bottom: 26px; }
+
+    /* 慶祝彩帶 Canvas */
+    #confettiCanvas {
+      position: fixed;
+      inset: 0;
+      width: 100vw;
+      height: 100vh;
+      pointer-events: none;
+      z-index: 120;
+    }
+
+    /* ==========================================================================
+       手機玩家端介面（掃描 QR Code 進入）
+       ========================================================================== */
+    #playerView {
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 18px 16px 32px;
+    }
+
+    .player-card {
+      width: 100%;
+      max-width: 440px;
+      background: rgba(15, 23, 42, 0.92);
+      border: 1px solid rgba(251, 191, 36, 0.4);
+      border-radius: 22px;
+      padding: 24px 20px;
+      box-shadow: 0 18px 50px rgba(0, 0, 0, 0.65);
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+    }
+
+    .player-header { text-align: center; }
+    .player-header h1 { font-size: 24px; font-weight: 900; color: var(--gold-bright); margin-bottom: 6px; }
+    .player-badges-row {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .player-room-badge {
+      display: inline-block;
+      padding: 4px 12px;
+      border-radius: 999px;
+      background: rgba(34, 211, 238, 0.14);
+      border: 1px solid rgba(34, 211, 238, 0.45);
+      color: var(--cyan);
+      font-size: 13px;
+      font-weight: 800;
+    }
+    .player-mode-badge {
+      display: inline-block;
+      padding: 4px 12px;
+      border-radius: 999px;
+      background: rgba(251, 191, 36, 0.16);
+      border: 1px solid rgba(251, 191, 36, 0.45);
+      color: var(--gold-bright);
+      font-size: 13px;
+      font-weight: 800;
+    }
+
+    .input-group { display: flex; flex-direction: column; gap: 6px; }
+    .input-group label { font-size: 14px; font-weight: 800; color: #e2e8f0; }
+
+    .emp-input {
+      width: 100%;
+      padding: 14px 16px;
+      border-radius: 12px;
+      border: 2px solid rgba(148, 163, 184, 0.35);
+      background: rgba(2, 6, 23, 0.85);
+      color: #ffffff;
+      font-size: 20px;
+      font-weight: 900;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      outline: none;
+    }
+
+    .emp-input:focus {
+      border-color: var(--gold);
+      box-shadow: 0 0 16px rgba(251, 191, 36, 0.3);
+    }
+
+    .sticks-grid {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 10px;
+    }
+
+    .stick-btn {
+      aspect-ratio: 1 / 1;
+      border-radius: 14px;
+      border: 2px solid rgba(148, 163, 184, 0.3);
+      background: rgba(30, 41, 59, 0.85);
+      color: #f8fafc;
+      font-size: 22px;
+      font-weight: 900;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+
+    .stick-btn.selected {
+      background: linear-gradient(135deg, #fbbf24, #d97706);
+      border-color: #fef08a;
+      color: #1c0f00;
+      transform: scale(1.06);
+      box-shadow: 0 0 18px rgba(251, 191, 36, 0.55);
+    }
+
+    .stick-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    .player-submit-btn {
+      width: 100%;
+      padding: 16px;
+      border-radius: 14px;
+      border: none;
+      background: linear-gradient(135deg, #10b981, #047857);
+      color: #ffffff;
+      font-size: 18px;
+      font-weight: 900;
+      cursor: pointer;
+      box-shadow: 0 6px 20px rgba(16, 185, 129, 0.35);
+    }
+
+    .player-submit-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+
+    .player-alert {
+      padding: 14px 16px;
+      border-radius: 14px;
+      font-size: 15px;
+      font-weight: 800;
+      line-height: 1.5;
+      text-align: center;
+    }
+
+    .player-alert.error {
+      background: rgba(159, 18, 57, 0.35);
+      border: 1.5px solid #fb7185;
+      color: #ffe4e6;
+    }
+
+    .player-alert.occupied {
+      background: rgba(180, 83, 9, 0.35);
+      border: 2px solid #fbbf24;
+      color: #fef3c7;
+    }
+
+    .player-alert.locked-started {
+      background: rgba(159, 18, 57, 0.55);
+      border: 2px solid #f43f5e;
+      color: #ffffff;
+      font-size: 17px;
+      padding: 20px 16px;
+    }
+
+    .player-success-box {
+      background: linear-gradient(160deg, rgba(6, 78, 59, 0.55), rgba(15, 23, 42, 0.9));
+      border: 2px solid #34d399;
+      border-radius: 16px;
+      padding: 20px 16px;
+      text-align: center;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .player-success-title { font-size: 20px; font-weight: 900; color: #6ee7b7; }
+    .player-success-detail { font-size: 17px; font-weight: 800; color: #ffffff; line-height: 1.6; }
+
+    /* 吐司通知 */
+    .toast {
+      position: fixed;
+      top: 74px;
+      left: 50%;
+      transform: translateX(-50%) translateY(-12px);
+      z-index: 200;
+      background: rgba(15, 23, 42, 0.96);
+      border: 1px solid var(--gold);
+      color: var(--gold-bright);
+      padding: 10px 22px;
+      border-radius: 999px;
+      font-size: 14px;
+      font-weight: 800;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.2s, transform 0.2s;
+      box-shadow: 0 8px 28px rgba(0, 0, 0, 0.65);
+      max-width: 90vw;
+      text-align: center;
+    }
+
+    .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: rgba(255, 255, 255, 0.04); }
+    ::-webkit-scrollbar-thumb { background: rgba(251, 191, 36, 0.35); border-radius: 3px; }
+
+    /* 響應式窄螢幕適配 */
+    @media (max-width: 1180px) {
+      .host-header {
+        height: auto;
+        flex-wrap: wrap;
+        padding: 8px 12px;
+      }
+      .host-main {
+        grid-template-columns: 1fr 330px;
+      }
+    }
+
+    @media (max-width: 860px) {
+      body.host-mode {
+        overflow-y: auto;
+      }
+      #hostView {
+        height: auto;
+        min-height: 100vh;
+        overflow: visible;
+      }
+      .host-main {
+        grid-template-columns: 1fr;
+        overflow: visible;
+      }
+      .stage-area {
+        min-height: 440px;
+      }
+      .hand-demo-stage {
+        width: 340px;
+        right: 12px;
+        bottom: 12px;
+      }
+    }
+  </style>
+</head>
+<body class="host-mode">
+
+  <!-- 慶祝彩帶畫布 -->
+  <canvas id="confettiCanvas"></canvas>
+
+  <!-- ==================== 主持端大螢幕介面（1920×1080） ==================== -->
+  <div id="hostView" class="hidden">
+    <header class="host-header">
+      <div class="brand-area">
+        <h1 id="stageTitle" class="brand-title" contenteditable="true" spellcheck="false" title="點擊可修改活動主標題">🎯 線上動態數支大作戰</h1>
+        <div class="conn-pill" title="PeerJS P2P 連線狀態">
+          <span id="connDot" class="conn-dot"></span>
+          <span id="connText">建立房間中...</span>
+        </div>
+      </div>
+
+      <div class="hud-stats">
+        <div class="stat-chip">
+          <span>清冊</span>
+          <strong id="statRoster">0</strong>
+        </div>
+        <div class="stat-chip highlight-cyan">
+          <span>已鎖定</span>
+          <strong id="statLocked">0</strong>
+        </div>
+        <div class="stat-chip highlight-gold">
+          <span>總支數</span>
+          <strong id="statTotalSticks">--</strong>
+        </div>
+        <div class="stat-chip">
+          <span>模式</span>
+          <strong id="statJoinMode" style="font-size:13px; color:#fbbf24;">清冊驗證</strong>
+        </div>
+        <div class="stat-chip">
+          <span>上限</span>
+          <strong id="statMaxSticks" style="font-size:15px; color:#22d3ee;">10支</strong>
+        </div>
+        <div class="stat-chip">
+          <span>狀態</span>
+          <strong id="statGameState" style="font-size:14px; color:#6ee7b7;">開放掃碼</strong>
+        </div>
+      </div>
+
+      <div class="header-actions">
+        <button id="btnOpenRosterModal" class="btn btn-gold" type="button">📋 員工清冊</button>
+        <button id="btnExportResults" class="btn btn-emerald" type="button">📊 匯出結果</button>
+        <button id="btnToggleHandDemo" class="btn btn-cyan" type="button" title="顯示或隱藏等待時動態手掌動作示意">✋ 手掌示意</button>
+        <button id="btnToggleSimPanel" class="btn btn-purple" type="button">🧪 模擬測試</button>
+        <button id="btnOpenAudioModal" class="btn" type="button">🎵 音效</button>
+        <button id="btnNewRound" class="btn btn-danger" type="button">🔄 新一輪</button>
+        <button id="btnFullscreen" class="btn" type="button">⛶ 全螢幕</button>
+      </div>
+    </header>
+
+    <main class="host-main">
+      <!-- 左側 200 人動態數支舞台 -->
+      <section class="stage-area">
+        <div id="liveCounterPill" class="live-counter-pill hidden">
+          <span style="font-size:14px; color:var(--text-muted); font-weight:800;">數支進度</span>
+          <span id="liveCounterNum" class="live-counter-num">0 / 0</span>
+          <span id="liveCounterTarget" class="live-counter-target">--</span>
+          <span id="dynShuffleBadge" class="dynshuffle-badge hidden">🔀 動態換位中</span>
+          <span id="slowMoBadge" class="slowmo-badge hidden">🔥 最後 20 支慢動作</span>
+        </div>
+
+        <div id="emptyStageBox" class="empty-stage-placeholder">
+          <h2 id="emptyStageTitle">👋 歡迎使用線上動態數支系統（無人數上限）</h2>
+          <p id="emptyStageDesc">請先點擊上方「<strong>📋 員工清冊</strong>」匯入 CSV / Excel 員工名單，或點擊下方按鈕一鍵生成 200 位測試員工清冊，即可立即開放大螢幕掃碼驗證！</p>
+          <div class="btn-row">
+            <button id="btnQuickOpenRoster" class="btn btn-gold" type="button">📋 匯入員工清冊</button>
+            <button id="btnQuickGen200" class="btn btn-emerald" type="button">⚡ 一鍵生成 200 位測試員工</button>
+          </div>
+        </div>
+
+        <div id="stageGrid" class="stage-grid-wrap"></div>
+
+        <!-- 等待時動態表演手掌動作示意（可隨時隱藏／切換大小／自由移動） -->
+        <div id="handDemoOverlay" class="hand-demo-stage size-md" aria-label="等待時動態表演手掌動作示意">
+          <div id="handDemoDragHandle" class="hand-demo-header" title="按住拖曳可自由移動位置，雙擊可歸位至右下角">
+            <div class="hand-demo-title">
+              <span class="drag-grip" aria-hidden="true">⠿</span>
+              <span>✋ 手勢表演</span>
+              <span id="handDemoModeTag" class="hand-demo-mode-tag" style="font-size:11px; color:var(--cyan); background:rgba(34,211,238,0.14); padding:2px 7px; border-radius:999px;">雙手 1~10 支</span>
+            </div>
+            <div class="hand-demo-controls">
+              <button id="btnHandDemoSize" class="btn" style="padding:3px 7px; font-size:11px;" type="button" title="切換手掌表演視窗大小（小／中／大／特大）">📐 中</button>
+              <button id="btnHandDemoStyle" class="btn" style="padding:3px 7px; font-size:11px;" type="button" title="切換循序示範或隨機出拳節奏">🔁 循序</button>
+              <button id="btnHideHandDemo" class="btn btn-danger" style="padding:3px 7px; font-size:11px;" type="button" title="隱藏手掌動作示意">✕ 隱藏</button>
+            </div>
+          </div>
+
+          <div id="handDemoClickable" class="hand-demo-body" title="點擊手掌可立即切換下一個示範手勢">
+            <div class="hands-arena">
+              <!-- 共用漸層定義（不佔空間） -->
+              <svg width="0" height="0" style="position:absolute;">
+                <defs>
+                  <linearGradient id="palmGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+                    <stop offset="0%" stop-color="#f59e0b" />
+                    <stop offset="100%" stop-color="#b45309" />
+                  </linearGradient>
+                  <linearGradient id="fingerUpGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+                    <stop offset="0%" stop-color="#fef08a" />
+                    <stop offset="55%" stop-color="#fbbf24" />
+                    <stop offset="100%" stop-color="#d97706" />
+                  </linearGradient>
+                </defs>
+              </svg>
+
+              <!-- 第一隻手（單手 1~5 或雙手之左手 1~5） -->
+              <div id="handWrapLeft" class="hand-svg-wrap">
+                <svg class="hand-svg" viewBox="0 0 140 160" aria-hidden="true">
+                  <!-- 小指 (第5指) -->
+                  <g id="L-f5" class="finger-group is-up">
+                    <rect class="finger-fill" x="102" y="34" width="16" height="58" rx="8" stroke-width="2.2" />
+                    <ellipse cx="110" cy="41" rx="4.5" ry="3.5" fill="rgba(255,255,255,0.45)" />
+                  </g>
+                  <!-- 無名指 (第4指) -->
+                  <g id="L-f4" class="finger-group is-up">
+                    <rect class="finger-fill" x="82" y="18" width="17" height="72" rx="8.5" stroke-width="2.2" />
+                    <ellipse cx="90.5" cy="25" rx="5" ry="3.8" fill="rgba(255,255,255,0.45)" />
+                  </g>
+                  <!-- 中指 (第3指) -->
+                  <g id="L-f3" class="finger-group is-up">
+                    <rect class="finger-fill" x="61" y="10" width="18" height="80" rx="9" stroke-width="2.2" />
+                    <ellipse cx="70" cy="17" rx="5" ry="4" fill="rgba(255,255,255,0.45)" />
+                  </g>
+                  <!-- 食指 (第2指) -->
+                  <g id="L-f2" class="finger-group is-up">
+                    <rect class="finger-fill" x="40" y="20" width="18" height="70" rx="9" stroke-width="2.2" />
+                    <ellipse cx="49" cy="27" rx="5" ry="3.8" fill="rgba(255,255,255,0.45)" />
+                  </g>
+                  <!-- 拇指 (第1指) -->
+                  <g id="L-f1" class="thumb-group is-up">
+                    <path class="finger-fill" d="M40 94 L16 66 C11 60 19 50 26 55 L48 76 Z" stroke-width="2.2" stroke-linejoin="round" />
+                  </g>
+                  <!-- 掌心 -->
+                  <rect x="36" y="76" width="84" height="62" rx="24" fill="url(#palmGrad)" stroke="#fef08a" stroke-width="2.5" />
+                  <path d="M52 104 Q78 96 104 106" fill="none" stroke="rgba(254,240,138,0.45)" stroke-width="2.5" stroke-linecap="round" />
+                  <!-- 手腕 -->
+                  <rect x="54" y="132" width="48" height="22" rx="10" fill="#1e293b" stroke="#22d3ee" stroke-width="2" />
+                </svg>
+              </div>
+
+              <!-- 第二隻手（僅 1~10 支模式顯示） -->
+              <div id="handWrapRight" class="hand-svg-wrap right-hand">
+                <svg class="hand-svg mirrored" viewBox="0 0 140 160" aria-hidden="true">
+                  <!-- 小指 -->
+                  <g id="R-f5" class="finger-group is-down">
+                    <rect class="finger-fill" x="102" y="34" width="16" height="58" rx="8" stroke-width="2.2" />
+                    <ellipse cx="110" cy="41" rx="4.5" ry="3.5" fill="rgba(255,255,255,0.45)" />
+                  </g>
+                  <!-- 無名指 -->
+                  <g id="R-f4" class="finger-group is-down">
+                    <rect class="finger-fill" x="82" y="18" width="17" height="72" rx="8.5" stroke-width="2.2" />
+                    <ellipse cx="90.5" cy="25" rx="5" ry="3.8" fill="rgba(255,255,255,0.45)" />
+                  </g>
+                  <!-- 中指 -->
+                  <g id="R-f3" class="finger-group is-down">
+                    <rect class="finger-fill" x="61" y="10" width="18" height="80" rx="9" stroke-width="2.2" />
+                    <ellipse cx="70" cy="17" rx="5" ry="4" fill="rgba(255,255,255,0.45)" />
+                  </g>
+                  <!-- 食指 -->
+                  <g id="R-f2" class="finger-group is-down">
+                    <rect class="finger-fill" x="40" y="20" width="18" height="70" rx="9" stroke-width="2.2" />
+                    <ellipse cx="49" cy="27" rx="5" ry="3.8" fill="rgba(255,255,255,0.45)" />
+                  </g>
+                  <!-- 拇指 -->
+                  <g id="R-f1" class="thumb-group is-down">
+                    <path class="finger-fill" d="M40 94 L16 66 C11 60 19 50 26 55 L48 76 Z" stroke-width="2.2" stroke-linejoin="round" />
+                  </g>
+                  <!-- 掌心 -->
+                  <rect x="36" y="76" width="84" height="62" rx="24" fill="url(#palmGrad)" stroke="#fef08a" stroke-width="2.5" />
+                  <path d="M52 104 Q78 96 104 106" fill="none" stroke="rgba(254,240,138,0.45)" stroke-width="2.5" stroke-linecap="round" />
+                  <!-- 手腕 -->
+                  <rect x="54" y="132" width="48" height="22" rx="10" fill="#1e293b" stroke="#22d3ee" stroke-width="2" />
+                </svg>
+              </div>
+            </div>
+
+            <div class="hand-demo-readout">
+              <div id="handDemoCount" class="hand-demo-count">示範：5 支</div>
+              <div id="handDemoCaption" class="hand-demo-caption">請掃描右側 QR Code 報到<br>決定本輪要出的支數！</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 重複工號防呆提醒橫幅（主動提醒前一位退出） -->
+        <div id="nudgeBanner" class="nudge-banner hidden">
+          <span style="font-size:24px;">⚠️</span>
+          <div id="nudgeText" class="nudge-text">工號重複登入提醒</div>
+          <button id="btnNudgeForceRelease" class="btn btn-gold" type="button">強制釋放該工號</button>
+          <button id="btnCloseNudge" class="btn" type="button">關閉</button>
+        </div>
+      </section>
+
+      <!-- 右側控制與 QR 面板 -->
+      <aside class="host-sidebar">
+        <!-- QR Code 卡片 -->
+        <div class="side-card">
+          <div class="side-card-title">
+            <span>📱 手機掃碼驗證出支</span>
+            <button id="btnCopyLink" class="btn" style="padding:3px 8px; font-size:11px;" type="button">🔗 複製網址</button>
+          </div>
+          <div id="qrBox" class="qr-box">
+            <div id="qrcode"></div>
+            <div class="qr-lock-overlay">
+              <div class="qr-lock-badge">🔒 遊戲已開始<br>停止掃碼與修改</div>
+            </div>
+          </div>
+          <div class="room-meta">
+            <span>房間代碼：<strong id="roomCodeDisplay" class="room-code-text">------</strong></span>
+            <button id="btnRegenRoom" class="btn" style="padding:3px 8px; font-size:11px;" type="button">重設房號</button>
+          </div>
+        </div>
+
+        <!-- 主控啟動按鈕 -->
+        <button id="btnStartCounting" class="btn-start-giant" type="button">🚀 鎖定名單／開始動態數支</button>
+
+        <!-- 參加模式與出支上限設定 -->
+        <div class="side-card">
+          <div class="side-card-title">
+            <span>🚪 參加驗證模式</span>
+            <span id="joinModeHint" style="font-size:11px; color:var(--gold-bright);">需符合員工清冊</span>
+          </div>
+          <div class="stick-mode-switch">
+            <button id="btnJoinModeRoster" class="mode-btn active" type="button" title="須輸入員工清冊內的工號才能報到">📋 清冊驗證</button>
+            <button id="btnJoinModeOpen" class="mode-btn" type="button" title="不限制員工號碼，掃碼輸入任意姓名或編號即可即時參加">⚡ 即時參加</button>
+          </div>
+          <div class="side-card-title" style="margin-top:2px;">
+            <span>🖐️ 出支上限設定</span>
+            <span id="maxSticksHint" style="font-size:11px; color:var(--cyan);">1 ~ 10 支（雙手）</span>
+          </div>
+          <div class="stick-mode-switch">
+            <button id="btnMode5Sticks" class="mode-btn" type="button">✋ 5 支模式 (1~5)</button>
+            <button id="btnMode10Sticks" class="mode-btn active" type="button">🙌 10 支模式 (1~10)</button>
+          </div>
+        </div>
+
+        <!-- 模擬功能統一集中區塊（可隱藏，正式活動時一鍵隱藏） -->
+        <div id="simControlPanel" class="side-card sim-card hidden">
+          <div class="side-card-title" style="color:#d8b4fe;">
+            <span>🧪 模擬功能集中測試區</span>
+            <button id="btnHideSimPanel" class="btn" style="padding:2px 7px; font-size:11px;" type="button">隱藏</button>
+          </div>
+          <div class="sim-grid">
+            <button id="btnSimCheckIn" class="btn btn-purple" type="button">🎲 模擬報到(測試)</button>
+            <button id="btnSimLockAll" class="btn btn-emerald" type="button">🔒 模擬鎖定(測試)</button>
+          </div>
+          <div style="font-size:11px; color:#e9d5ff; font-weight:700;">單機模擬報到(測試)（直接驗證防呆與釋放）：</div>
+          <div class="sim-inline-form">
+            <input id="simEmpIdInput" class="sim-input" type="text" placeholder="工號如 A001">
+            <select id="simStickSelect" class="sim-input"></select>
+            <button id="btnLocalSimSubmit" class="btn btn-gold" style="padding:5px 8px;" type="button">送出</button>
+          </div>
+          <button id="btnOpenPlayerTab" class="btn" style="width:100%;" type="button">📱 開啟新分頁單機模擬手機端(測試)</button>
+        </div>
+
+        <!-- 速度調整與慢動作／換位詢問引擎 -->
+        <div class="side-card">
+          <div class="side-card-title">
+            <span>⚡ 數支速度與高潮設定</span>
+            <span id="speedMsLabel" style="color:var(--cyan); font-family:Consolas,monospace;">22 ms/支</span>
+          </div>
+          <div class="speed-row">
+            <span style="font-size:11px; color:var(--text-muted);">慢</span>
+            <input id="speedSlider" type="range" min="5" max="500" step="1" value="22">
+            <span style="font-size:11px; color:var(--text-muted);">快</span>
+          </div>
+          <div class="speed-presets">
+            <button class="preset-btn" data-ms="350" type="button">1x</button>
+            <button class="preset-btn" data-ms="70" type="button">5x</button>
+            <button class="preset-btn active" data-ms="22" type="button">15x</button>
+            <button class="preset-btn" data-ms="8" type="button">30x</button>
+          </div>
+          <label class="checkbox-label">
+            <input id="chkSlowMo" type="checkbox" checked>
+            <span>最後 20 支自動慢動作懸疑減速 (350ms)</span>
+          </label>
+          <label class="checkbox-label">
+            <input id="chkAsk40" type="checkbox" checked>
+            <span>最後 40% 詢問是否隨機換位</span>
+          </label>
+          <label class="checkbox-label">
+            <input id="chkAsk10" type="checkbox" checked>
+            <span>最後 10% 詢問是否開啟動態換位</span>
+          </label>
+        </div>
+
+        <!-- 快速 BGM 音控 -->
+        <div class="side-card" style="padding:8px 10px;">
+          <div class="quick-audio-row">
+            <button id="btnQuickBgm" class="btn" style="padding:4px 9px;" type="button">🎵 BGM 關</button>
+            <input id="quickBgmVol" type="range" min="0" max="100" value="40">
+            <span id="quickBgmVolVal" style="font-size:11px; width:32px; text-align:right;">40%</span>
+          </div>
+        </div>
+
+        <!-- 即時動態紀錄 -->
+        <div class="side-card" style="flex:1; min-height:96px;">
+          <div class="side-card-title">
+            <span>📡 即時報到與防呆紀錄</span>
+            <span id="roundHistoryBadge" style="font-size:11px; color:#6ee7b7;">已完賽 0 輪</span>
+          </div>
+          <div id="miniLog" class="mini-log">
+            <div class="log-item">系統已就緒，等待匯入清冊與員工掃碼...</div>
+          </div>
+        </div>
+      </aside>
+    </main>
+  </div>
+
+  <!-- ==================== 手機玩家端介面（?room=代碼&max=5|10） ==================== -->
+  <div id="playerView" class="hidden">
+    <div class="player-card">
+      <div class="player-header">
+        <h1>🎯 線上數支遊戲報到</h1>
+        <div class="player-badges-row">
+          <span id="playerRoomBadge" class="player-room-badge">房間代碼：------</span>
+          <span id="playerJoinBadge" class="player-mode-badge" style="background:rgba(16,185,129,0.16); border-color:rgba(16,185,129,0.45); color:#6ee7b7;">清冊驗證</span>
+          <span id="playerModeBadge" class="player-mode-badge">上限：1 ~ 10 支</span>
+        </div>
+      </div>
+
+      <!-- 遊戲已開始封鎖提示 -->
+      <div id="playerStartedLockBox" class="player-alert locked-started hidden">
+        ⛔ 本輪遊戲已經開始，無法再驗證加入或更改支數，請等待下一輪重新開放！
+      </div>
+
+      <!-- 驗證成功卡片 -->
+      <div id="playerSuccessBox" class="player-success-box hidden">
+        <div class="player-success-title">✅ 驗證成功並已鎖定！</div>
+        <div id="playerSuccessDetail" class="player-success-detail"></div>
+        <p style="font-size:13px; color:var(--text-muted);">您的支數已安全傳送至大螢幕隱藏鎖定，請觀看大螢幕等待開獎！</p>
+        <button id="btnPlayerExit" class="btn btn-danger" style="width:100%; padding:12px; font-size:15px;" type="button">
+          🚪 退出並釋放此工號（讓其他人登入或重選）
+        </button>
+      </div>
+
+      <!-- 工號驗證與 1~5 / 1~10 支選擇表單 -->
+      <div id="playerFormArea" style="display:flex; flex-direction:column; gap:16px;">
+        <div class="input-group">
+          <label id="playerEmpLabel" for="playerEmpId">1. 請輸入員工編號（自動轉大寫）</label>
+          <input id="playerEmpId" class="emp-input" type="text" placeholder="例如：A001" autocomplete="off">
+        </div>
+
+        <div class="input-group">
+          <label id="playerStickLabel">2. 請點選本輪要出的支數（1 ~ 10 支）</label>
+          <div id="sticksGrid" class="sticks-grid"></div>
+        </div>
+
+        <div id="playerAlertBox" class="player-alert hidden"></div>
+
+        <button id="btnPlayerNudge" class="btn btn-gold hidden" style="width:100%; padding:13px; font-size:15px;" type="button">
+          🔔 再次通知大螢幕提醒前一位退出
+        </button>
+
+        <button id="btnPlayerSubmit" class="player-submit-btn" type="button">
+          ✅ 驗證並鎖定送出
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== 彈窗 1：員工清冊匯入與白名單管理 ==================== -->
+  <div id="rosterModal" class="modal-backdrop">
+    <div class="modal-box">
+      <div class="modal-header">
+        <h3>📋 員工清冊匯入與白名單管理（無人數上限・依清冊人數）</h3>
+        <button class="modal-close-btn" data-close="rosterModal" type="button">✕</button>
+      </div>
+
+      <div class="modal-section">
+        <h4>1. 檔案匯入或快速工具</h4>
+        <div class="btn-row">
+          <button id="btnUploadRosterFile" class="btn btn-gold" type="button">📂 匯入員工清冊（.csv / .xlsx / .txt）</button>
+          <button id="btnDownloadSampleCsv" class="btn" type="button">📥 下載範例清冊範本（CSV）</button>
+          <button id="btnGen200Test" class="btn btn-emerald" type="button">⚡ 一鍵生成 200 位測試員工清冊</button>
+          <button id="btnClearRoster" class="btn btn-danger" type="button">🗑️ 清空清冊</button>
+          <input id="rosterFileInput" type="file" accept=".csv,.xlsx,.xls,.txt" class="hidden">
+        </div>
+        <p style="font-size:12px; color:var(--text-muted);">
+          支援格式：第一欄「員工編號」、第二欄「員工姓名」（自動忽略標題列、去除前後空白並轉大寫，重複工號自動去重；無人數上限，超過 240 人時自動啟用高效能渲染模式以維持流暢）。
+        </p>
+      </div>
+
+      <div class="modal-section">
+        <h4>2. 快速貼上文字框（格式：`A001,王小明` 或 `A001 王小明`，每行一筆）</h4>
+        <textarea id="rosterPasteInput" class="paste-area" placeholder="A001,王小明&#10;A002,陳美玲&#10;A003 張志豪"></textarea>
+        <div class="btn-row" style="justify-content:space-between;">
+          <span id="rosterCountPreview" style="font-size:13px; color:var(--gold-bright); font-weight:700;">目前清冊：0 人</span>
+          <button id="btnApplyPasteRoster" class="btn btn-gold" type="button">✅ 匯入貼上名單並儲存</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== 彈窗 2：音樂與音效管理（含本地音檔匯入） ==================== -->
+  <div id="audioModal" class="modal-backdrop">
+    <div class="modal-box">
+      <div class="modal-header">
+        <h3>🎵 音樂、音效控制與本地音檔匯入</h3>
+        <button class="modal-close-btn" data-close="audioModal" type="button">✕</button>
+      </div>
+
+      <div class="modal-section">
+        <h4>音量與開關設定</h4>
+        <div class="quick-audio-row">
+          <span style="width:110px; font-weight:700;">背景音樂 BGM</span>
+          <button id="btnModalBgmToggle" class="btn" type="button">▶ 播放</button>
+          <input id="modalBgmVol" type="range" min="0" max="100" value="40">
+          <span id="modalBgmVolVal" style="width:40px; text-align:right;">40%</span>
+        </div>
+        <div class="quick-audio-row">
+          <span style="width:110px; font-weight:700;">音效音量 SFX</span>
+          <button id="btnModalSfxToggle" class="btn btn-emerald" type="button">🔊 開啟</button>
+          <input id="modalSfxVol" type="range" min="0" max="100" value="80">
+          <span id="modalSfxVolVal" style="width:40px; text-align:right;">80%</span>
+        </div>
+      </div>
+
+      <div class="modal-section">
+        <h4>本地音檔匯入替換（支援 MP3 / WAV / OGG）</h4>
+
+        <div class="audio-track-row">
+          <strong>🎵 背景音樂</strong>
+          <span id="statusBgmFile" class="audio-status-text">內建 Web Audio 動感電子循環</span>
+          <button id="btnImportBgm" class="btn" type="button">📂 匯入音檔</button>
+          <button id="btnTestBgm" class="btn" type="button">▶ 試聽</button>
+          <button id="btnResetBgm" class="btn" type="button">↺ 預設</button>
+          <input id="fileBgm" type="file" accept="audio/*" class="hidden">
+        </div>
+
+        <div class="audio-track-row">
+          <strong>⚡ 數支跳動音</strong>
+          <span id="statusTickFile" class="audio-status-text">內建 Web Audio 合成節奏音（自動防破音）</span>
+          <button id="btnImportTick" class="btn" type="button">📂 匯入音檔</button>
+          <button id="btnTestTick" class="btn" type="button">▶ 試聽</button>
+          <button id="btnResetTick" class="btn" type="button">↺ 預設</button>
+          <input id="fileTick" type="file" accept="audio/*" class="hidden">
+        </div>
+
+        <div class="audio-track-row">
+          <strong>🏆 中獎慶祝音</strong>
+          <span id="statusWinFile" class="audio-status-text">內建 Web Audio 勝利和弦音效</span>
+          <button id="btnImportWin" class="btn" type="button">📂 匯入音檔</button>
+          <button id="btnTestWin" class="btn" type="button">▶ 試聽</button>
+          <button id="btnResetWin" class="btn" type="button">↺ 預設</button>
+          <input id="fileWin" type="file" accept="audio/*" class="hidden">
+        </div>
+
+        <div class="btn-row" style="justify-content:flex-end; margin-top:6px;">
+          <button id="btnResetAllAudio" class="btn btn-danger" type="button">↺ 一鍵恢復全部預設音效</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== 彈窗 3：最後 40% 換位詢問 ==================== -->
+  <div id="shuffle40Modal" class="modal-backdrop">
+    <div class="prompt-modal">
+      <div style="font-size:52px;">🔀</div>
+      <h3>進入最後 40% 倒數！是否要換位？</h3>
+      <p id="shuffle40Desc">目前剩餘最後 40% 支數，系統已自動暫停。請問是否要將全場參賽者的舞台位置「隨機洗牌換位」後繼續數支？</p>
+      <div class="btn-row" style="justify-content:center; gap:12px; margin-top:6px;">
+        <button id="btnDoShuffle40" class="btn btn-gold" style="padding:13px 22px; font-size:16px;" type="button">🔀 立即隨機換位並繼續</button>
+        <button id="btnSkipShuffle40" class="btn" style="padding:13px 22px; font-size:16px;" type="button">➡️ 維持原位繼續</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== 彈窗 4：最後 10% 動態換位詢問 ==================== -->
+  <div id="shuffle10Modal" class="modal-backdrop">
+    <div class="prompt-modal" style="border-color:#c084fc;">
+      <div style="font-size:52px;">⚡</div>
+      <h3>進入最後 10% 決戰！是否開啟動態換位？</h3>
+      <p id="shuffle10Desc">即將揭曉最終中獎者！請問是否開啟「動態換位」模式（每推進一支即隨機交換尚未歸零的參賽者位置），將現場緊張氣氛拉到最高點？</p>
+      <div class="btn-row" style="justify-content:center; gap:12px; margin-top:6px;">
+        <button id="btnDoShuffle10" class="btn btn-purple" style="padding:13px 22px; font-size:16px;" type="button">🔥 開啟動態換位並繼續</button>
+        <button id="btnSkipShuffle10" class="btn" style="padding:13px 22px; font-size:16px;" type="button">➡️ 維持原位繼續</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== 彈窗 5：中獎者慶祝大字報 ==================== -->
+  <div id="winnerModal" class="modal-backdrop">
+    <div class="winner-modal">
+      <div class="winner-trophy">🏆</div>
+      <div class="winner-subtitle">本輪動態數支・幸運中獎者</div>
+      <div id="winnerEmpId" class="winner-emp-id">A001</div>
+      <div id="winnerEmpName" class="winner-emp-name">王小明</div>
+      <div id="winnerMeta" class="winner-meta">全場總支數：0 支 ｜ 中獎者出支：0 支</div>
+      <div class="btn-row" style="justify-content:center; gap:12px;">
+        <button id="btnCloseWinnerModal" class="btn" style="padding:12px 20px; font-size:15px;" type="button">檢視舞台結果</button>
+        <button id="btnWinnerExport" class="btn btn-emerald" style="padding:12px 20px; font-size:15px;" type="button">📊 匯出結果紀錄</button>
+        <button id="btnWinnerNewRound" class="btn btn-gold" style="padding:12px 24px; font-size:15px;" type="button">🔄 開啟全新一輪</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== 彈窗 6：通用頁內確認對話框 ==================== -->
+  <div id="confirmModal" class="modal-backdrop" style="z-index:150;">
+    <div class="prompt-modal" style="width:min(460px, 92vw); padding:26px 24px;">
+      <div style="font-size:40px;">❔</div>
+      <h3 id="confirmModalTitle" style="font-size:21px;">請確認操作</h3>
+      <p id="confirmModalMessage"></p>
+      <div class="btn-row" style="justify-content:center; gap:12px; margin-top:4px;">
+        <button id="btnConfirmCancel" class="btn" style="padding:10px 22px; font-size:14px;" type="button">取消</button>
+        <button id="btnConfirmOk" class="btn btn-gold" style="padding:10px 24px; font-size:14px;" type="button">確定執行</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast"></div>
+
+  <script>
+    /* ==========================================================================
+       全域設定、安全儲存工具與頁內確認彈窗
+       ========================================================================== */
+    const urlParams = new URLSearchParams(window.location.search);
+    const ROOM_PARAM = (urlParams.get('room') || '').trim().toUpperCase();
+    const MAX_PARAM_RAW = parseInt(urlParams.get('max') || '10', 10);
+    const INITIAL_PLAYER_MAX = MAX_PARAM_RAW === 5 ? 5 : 10;
+    const MODE_PARAM_RAW = (urlParams.get('mode') || 'roster').trim().toLowerCase();
+    const INITIAL_PLAYER_JOIN_MODE = MODE_PARAM_RAW === 'open' ? 'open' : 'roster';
+    const IS_PLAYER_MODE = ROOM_PARAM.length > 0;
+
+    const STORAGE_ROSTER_KEY = 'countgame_roster_v2';
+    const STORAGE_ROOM_KEY = 'countgame_room_id_v2';
+    const STORAGE_TITLE_KEY = 'countgame_stage_title_v2';
+    const STORAGE_HISTORY_KEY = 'countgame_history_v2';
+    const STORAGE_MAX_STICKS_KEY = 'countgame_max_sticks_v2';
+    const STORAGE_JOIN_MODE_KEY = 'countgame_join_mode_v2';
+    const STORAGE_HAND_HIDDEN_KEY = 'countgame_hand_demo_hidden_v2';
+    const STORAGE_HAND_SIZE_KEY = 'countgame_hand_demo_size_v2';
+    const STORAGE_HAND_POS_KEY = 'countgame_hand_demo_pos_v2';
+    const STORAGE_PLAYER_EMP_KEY = 'countgame_player_emp_v2';
+    const STORAGE_PLAYER_DEV_KEY = 'countgame_player_device_v2';
+    const PERF_MODE_THRESHOLD = 240; // 超過此人數自動啟用高效能渲染模式，無人數上限
+
+    function safeGetStorage(key) {
+      try { return window.localStorage.getItem(key); } catch (e) { return null; }
+    }
+
+    function safeSetStorage(key, val) {
+      try { window.localStorage.setItem(key, val); } catch (e) {}
+    }
+
+    let toastTimer = null;
+    function showToast(msg, ms = 2800) {
+      const el = document.getElementById('toast');
+      el.textContent = msg;
+      el.classList.add('show');
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => el.classList.remove('show'), ms);
+    }
+
+    let pendingConfirmCb = null;
+    function showConfirmDialog(message, onConfirm, title = '請確認操作') {
+      document.getElementById('confirmModalTitle').textContent = title;
+      document.getElementById('confirmModalMessage').textContent = message;
+      pendingConfirmCb = onConfirm;
+      document.getElementById('confirmModal').classList.add('open');
+    }
+
+    document.getElementById('btnConfirmCancel').addEventListener('click', () => {
+      document.getElementById('confirmModal').classList.remove('open');
+      pendingConfirmCb = null;
+    });
+
+    document.getElementById('btnConfirmOk').addEventListener('click', () => {
+      document.getElementById('confirmModal').classList.remove('open');
+      const cb = pendingConfirmCb;
+      pendingConfirmCb = null;
+      if (typeof cb === 'function') cb();
+    });
+
+    function copyTextFallback(text) {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        return navigator.clipboard.writeText(text).catch(() => legacyCopy(text));
+      }
+      return legacyCopy(text);
+    }
+
+    function legacyCopy(text) {
+      return new Promise((resolve, reject) => {
+        const ta = document.createElement('textarea');
+        ta.value = text;
+        ta.style.position = 'fixed';
+        ta.style.opacity = '0';
+        document.body.appendChild(ta);
+        ta.select();
+        try {
+          document.execCommand('copy');
+          document.body.removeChild(ta);
+          resolve();
+        } catch (err) {
+          document.body.removeChild(ta);
+          reject(err);
+        }
+      });
+    }
+
+    function escapeHtml(str) {
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    }
+
+    function swapDomNodes(nodeA, nodeB) {
+      if (!nodeA || !nodeB || nodeA === nodeB) return;
+      const parentA = nodeA.parentNode;
+      const siblingA = nodeA.nextSibling === nodeB ? nodeA : nodeA.nextSibling;
+      nodeB.parentNode.insertBefore(nodeA, nodeB);
+      parentA.insertBefore(nodeB, siblingA);
+    }
+
+    /* ==========================================================================
+       音效引擎：Web Audio API 內建合成音軌 ＋ 本地音檔匯入替換
+       ========================================================================== */
+    const AudioEngine = (() => {
+      let ctx = null;
+      let bgmPlaying = false;
+      let bgmTimer = null;
+      let bgmStep = 0;
+      let sfxEnabled = true;
+      let bgmVolume = 0.4;
+      let sfxVolume = 0.8;
+      let lastTickPlayedAt = 0;
+
+      const customFiles = {
+        bgm: { url: null, name: '', audio: null },
+        tick: { url: null, name: '' },
+        win: { url: null, name: '' }
+      };
+
+      function ensureCtx() {
+        if (!ctx) {
+          const Ctx = window.AudioContext || window.webkitAudioContext;
+          if (Ctx) ctx = new Ctx();
+        }
+        if (ctx && ctx.state === 'suspended') {
+          ctx.resume().catch(() => {});
+        }
+        return ctx;
+      }
+
+      const bassNotes = [130.81, 130.81, 164.81, 196.00, 146.83, 146.83, 174.61, 196.00];
+      const leadNotes = [523.25, 0, 659.25, 783.99, 659.25, 0, 587.33, 659.25, 523.25, 0, 783.99, 880.00, 783.99, 659.25, 587.33, 0];
+
+      function playSynthBgmStep() {
+        if (!bgmPlaying || customFiles.bgm.url) return;
+        const c = ensureCtx();
+        if (!c) return;
+        const now = c.currentTime;
+        const vol = bgmVolume * 0.22;
+
+        if (bgmStep % 2 === 0) {
+          const osc = c.createOscillator();
+          const gain = c.createGain();
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(140, now);
+          osc.frequency.exponentialRampToValueAtTime(42, now + 0.11);
+          gain.gain.setValueAtTime(vol * 1.15, now);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + 0.13);
+          osc.connect(gain);
+          gain.connect(c.destination);
+          osc.start(now);
+          osc.stop(now + 0.14);
+        }
+
+        const bFreq = bassNotes[bgmStep % bassNotes.length];
+        const bOsc = c.createOscillator();
+        const bGain = c.createGain();
+        const bFilter = c.createBiquadFilter();
+        bOsc.type = 'sawtooth';
+        bOsc.frequency.setValueAtTime(bFreq, now);
+        bFilter.type = 'lowpass';
+        bFilter.frequency.setValueAtTime(520, now);
+        bGain.gain.setValueAtTime(vol * 0.5, now);
+        bGain.gain.exponentialRampToValueAtTime(0.001, now + 0.2);
+        bOsc.connect(bFilter);
+        bFilter.connect(bGain);
+        bGain.connect(c.destination);
+        bOsc.start(now);
+        bOsc.stop(now + 0.21);
+
+        const lFreq = leadNotes[bgmStep % leadNotes.length];
+        if (lFreq > 0) {
+          const lOsc = c.createOscillator();
+          const lGain = c.createGain();
+          lOsc.type = 'triangle';
+          lOsc.frequency.setValueAtTime(lFreq, now);
+          lGain.gain.setValueAtTime(vol * 0.45, now);
+          lGain.gain.exponentialRampToValueAtTime(0.001, now + 0.18);
+          lOsc.connect(lGain);
+          lGain.connect(c.destination);
+          lOsc.start(now);
+          lOsc.stop(now + 0.19);
+        }
+
+        bgmStep = (bgmStep + 1) % 16;
+      }
+
+      function startBgm() {
+        bgmPlaying = true;
+        if (customFiles.bgm.url) {
+          if (!customFiles.bgm.audio) {
+            customFiles.bgm.audio = new Audio(customFiles.bgm.url);
+            customFiles.bgm.audio.loop = true;
+          }
+          customFiles.bgm.audio.volume = bgmVolume;
+          customFiles.bgm.audio.play().catch(() => {});
+        } else {
+          ensureCtx();
+          clearInterval(bgmTimer);
+          bgmTimer = setInterval(playSynthBgmStep, 240);
+          playSynthBgmStep();
+        }
+        syncAudioButtons();
+      }
+
+      function stopBgm() {
+        bgmPlaying = false;
+        clearInterval(bgmTimer);
+        bgmTimer = null;
+        if (customFiles.bgm.audio) customFiles.bgm.audio.pause();
+        syncAudioButtons();
+      }
+
+      function toggleBgm() {
+        if (bgmPlaying) stopBgm();
+        else startBgm();
+      }
+
+      function setBgmVolume(v) {
+        bgmVolume = Math.max(0, Math.min(1, v));
+        if (customFiles.bgm.audio) customFiles.bgm.audio.volume = bgmVolume;
+      }
+
+      function setSfxVolume(v) { sfxVolume = Math.max(0, Math.min(1, v)); }
+      function toggleSfx() { sfxEnabled = !sfxEnabled; syncAudioButtons(); }
+
+      function playTick(isSlowMo = false, remaining = 99) {
+        if (!sfxEnabled) return;
+        const nowMs = performance.now();
+        const minGap = isSlowMo ? 60 : 42;
+        if (nowMs - lastTickPlayedAt < minGap) return;
+        lastTickPlayedAt = nowMs;
+
+        if (customFiles.tick.url) {
+          const a = new Audio(customFiles.tick.url);
+          a.volume = sfxVolume;
+          a.play().catch(() => {});
+          return;
+        }
+
+        const c = ensureCtx();
+        if (!c) return;
+        const now = c.currentTime;
+        const osc = c.createOscillator();
+        const gain = c.createGain();
+
+        if (isSlowMo) {
+          const tensionFreq = 520 + Math.max(0, 20 - remaining) * 32;
+          osc.type = 'triangle';
+          osc.frequency.setValueAtTime(tensionFreq, now);
+          osc.frequency.exponentialRampToValueAtTime(tensionFreq * 0.88, now + 0.12);
+          gain.gain.setValueAtTime(sfxVolume * 0.3, now);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + 0.14);
+          osc.connect(gain);
+          gain.connect(c.destination);
+          osc.start(now);
+          osc.stop(now + 0.15);
+        } else {
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(780, now);
+          osc.frequency.exponentialRampToValueAtTime(420, now + 0.032);
+          gain.gain.setValueAtTime(sfxVolume * 0.18, now);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + 0.035);
+          osc.connect(gain);
+          gain.connect(c.destination);
+          osc.start(now);
+          osc.stop(now + 0.04);
+        }
+      }
+
+      function playReveal() {
+        if (!sfxEnabled) return;
+        const c = ensureCtx();
+        if (!c) return;
+        const now = c.currentTime;
+        [440, 554.37, 659.25].forEach((freq, idx) => {
+          const osc = c.createOscillator();
+          const gain = c.createGain();
+          osc.type = 'triangle';
+          osc.frequency.setValueAtTime(freq, now + idx * 0.06);
+          gain.gain.setValueAtTime(sfxVolume * 0.2, now + idx * 0.06);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.06 + 0.28);
+          osc.connect(gain);
+          gain.connect(c.destination);
+          osc.start(now + idx * 0.06);
+          osc.stop(now + idx * 0.06 + 0.3);
+        });
+      }
+
+      function playWin() {
+        if (!sfxEnabled) return;
+        if (customFiles.win.url) {
+          const a = new Audio(customFiles.win.url);
+          a.volume = sfxVolume;
+          a.play().catch(() => {});
+          return;
+        }
+        const c = ensureCtx();
+        if (!c) return;
+        const now = c.currentTime;
+        const fanfare = [
+          { f: 523.25, t: 0.00, d: 0.22 },
+          { f: 659.25, t: 0.10, d: 0.22 },
+          { f: 783.99, t: 0.20, d: 0.25 },
+          { f: 1046.5, t: 0.32, d: 0.95 },
+          { f: 1318.5, t: 0.36, d: 0.95 },
+          { f: 1567.9, t: 0.42, d: 1.05 }
+        ];
+        fanfare.forEach(n => {
+          const osc = c.createOscillator();
+          const gain = c.createGain();
+          osc.type = 'triangle';
+          osc.frequency.setValueAtTime(n.f, now + n.t);
+          gain.gain.setValueAtTime(0.001, now + n.t);
+          gain.gain.linearRampToValueAtTime(sfxVolume * 0.25, now + n.t + 0.03);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + n.t + n.d);
+          osc.connect(gain);
+          gain.connect(c.destination);
+          osc.start(now + n.t);
+          osc.stop(now + n.t + n.d + 0.04);
+        });
+      }
+
+      function importCustom(type, file) {
+        if (!file) return;
+        if (customFiles[type].url) URL.revokeObjectURL(customFiles[type].url);
+        const url = URL.createObjectURL(file);
+        customFiles[type].url = url;
+        customFiles[type].name = file.name;
+
+        if (type === 'bgm') {
+          const wasPlaying = bgmPlaying;
+          stopBgm();
+          customFiles.bgm.audio = new Audio(url);
+          customFiles.bgm.audio.loop = true;
+          customFiles.bgm.audio.volume = bgmVolume;
+          if (wasPlaying) startBgm();
+          document.getElementById('statusBgmFile').textContent = `已匯入：${file.name}`;
+        } else if (type === 'tick') {
+          document.getElementById('statusTickFile').textContent = `已匯入：${file.name}`;
+        } else if (type === 'win') {
+          document.getElementById('statusWinFile').textContent = `已匯入：${file.name}`;
+        }
+        showToast(`🎵 已匯入自訂音檔：${file.name}`);
+      }
+
+      function resetCustom(type) {
+        if (type === 'bgm') {
+          const wasPlaying = bgmPlaying;
+          stopBgm();
+          if (customFiles.bgm.url) URL.revokeObjectURL(customFiles.bgm.url);
+          customFiles.bgm = { url: null, name: '', audio: null };
+          document.getElementById('statusBgmFile').textContent = '內建 Web Audio 動感電子循環';
+          if (wasPlaying) startBgm();
+        } else if (type === 'tick') {
+          if (customFiles.tick.url) URL.revokeObjectURL(customFiles.tick.url);
+          customFiles.tick = { url: null, name: '' };
+          document.getElementById('statusTickFile').textContent = '內建 Web Audio 合成節奏音（自動防破音）';
+        } else if (type === 'win') {
+          if (customFiles.win.url) URL.revokeObjectURL(customFiles.win.url);
+          customFiles.win = { url: null, name: '' };
+          document.getElementById('statusWinFile').textContent = '內建 Web Audio 勝利和弦音效';
+        }
+      }
+
+      function syncAudioButtons() {
+        const qBtn = document.getElementById('btnQuickBgm');
+        const mBtn = document.getElementById('btnModalBgmToggle');
+        const sBtn = document.getElementById('btnModalSfxToggle');
+        if (qBtn) {
+          qBtn.textContent = bgmPlaying ? '🎵 BGM 開' : '🎵 BGM 關';
+          qBtn.classList.toggle('btn-emerald', bgmPlaying);
+        }
+        if (mBtn) {
+          mBtn.textContent = bgmPlaying ? '⏸ 暫停' : '▶ 播放';
+          mBtn.classList.toggle('btn-emerald', bgmPlaying);
+        }
+        if (sBtn) {
+          sBtn.textContent = sfxEnabled ? '🔊 開啟' : '🔇 靜音';
+          sBtn.classList.toggle('btn-emerald', sfxEnabled);
+        }
+      }
+
+      return {
+        startBgm, stopBgm, toggleBgm, setBgmVolume, setSfxVolume, toggleSfx,
+        playTick, playReveal, playWin, importCustom, resetCustom, syncAudioButtons
+      };
+    })();
+
+    /* ==========================================================================
+       慶祝彩帶粒子特效（純原生 HTML5 Canvas）
+       ========================================================================== */
+    const ConfettiEngine = (() => {
+      const canvas = document.getElementById('confettiCanvas');
+      const ctx = canvas.getContext('2d');
+      let pieces = [];
+      let rafId = null;
+
+      function resize() {
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+      }
+
+      function launch(count = 200) {
+        resize();
+        const colors = ['#fbbf24', '#fef08a', '#22d3ee', '#f43f5e', '#10b981', '#a855f7', '#ffffff'];
+        for (let i = 0; i < count; i++) {
+          const angle = Math.random() * Math.PI * 2;
+          const speed = 5 + Math.random() * 14;
+          pieces.push({
+            x: canvas.width * (0.2 + Math.random() * 0.6),
+            y: canvas.height * 0.35,
+            vx: Math.cos(angle) * speed,
+            vy: Math.sin(angle) * speed - 8,
+            w: 7 + Math.random() * 8,
+            h: 4 + Math.random() * 5,
+            rot: Math.random() * Math.PI * 2,
+            vRot: (Math.random() - 0.5) * 0.25,
+            color: colors[i % colors.length],
+            life: 1
+          });
+        }
+        if (!rafId) loop();
+      }
+
+      function loop() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        for (let i = pieces.length - 1; i >= 0; i--) {
+          const p = pieces[i];
+          p.vy += 0.26;
+          p.vx *= 0.985;
+          p.x += p.vx;
+          p.y += p.vy;
+          p.rot += p.vRot;
+          p.life -= 0.0055;
+
+          if (p.life <= 0 || p.y > canvas.height + 40) {
+            pieces.splice(i, 1);
+            continue;
+          }
+          ctx.save();
+          ctx.globalAlpha = Math.max(0, p.life);
+          ctx.translate(p.x, p.y);
+          ctx.rotate(p.rot);
+          ctx.fillStyle = p.color;
+          ctx.fillRect(-p.w / 2, -p.h / 2, p.w, p.h);
+          ctx.restore();
+        }
+        if (pieces.length > 0) rafId = requestAnimationFrame(loop);
+        else { ctx.clearRect(0, 0, canvas.width, canvas.height); rafId = null; }
+      }
+
+      window.addEventListener('resize', resize);
+      return { launch };
+    })();
+
+    /* ==========================================================================
+       等待時動態表演手掌動作引擎（支援 5 支單手 / 10 支雙手，可隨時隱藏）
+       ========================================================================== */
+    const HandDemoEngine = (() => {
+      // 自然數支手勢指法對應表（1:拇指, 2:食指, 3:中指, 4:無名指, 5:小指）
+      const SINGLE_HAND_POSES = {
+        0: [],
+        1: [2],             // 比 1：食指
+        2: [2, 3],          // 比 2：食指＋中指
+        3: [2, 3, 4],       // 比 3：食指＋中指＋無名指
+        4: [2, 3, 4, 5],    // 比 4：四指伸直
+        5: [1, 2, 3, 4, 5]  // 比 5：全掌張開
+      };
+
+      const CAPTIONS = [
+        '掃描右側 QR Code 報到<br>決定本輪要出的支數！',
+        '比出你的幸運支數！<br>點擊手掌可切換示範動作',
+        '等待全場報到中…<br>出幾支才不會剛好數到自己？',
+        '準備好了嗎？<br>鎖定名單後立即全場翻牌！'
+      ];
+
+      let maxLimit = 10;
+      let currentNum = 1;
+      let styleMode = 'seq'; // 'seq' 循序 | 'rand' 隨機
+      let timer = null;
+      let isVisible = safeGetStorage(STORAGE_HAND_HIDDEN_KEY) !== '1';
+      let captionIdx = 0;
+
+      function applyFingers(prefix, count) {
+        const upList = SINGLE_HAND_POSES[Math.max(0, Math.min(5, count))] || [];
+        for (let i = 1; i <= 5; i++) {
+          const el = document.getElementById(`${prefix}-f${i}`);
+          if (!el) continue;
+          const isUp = upList.includes(i);
+          el.classList.toggle('is-up', isUp);
+          el.classList.toggle('is-down', !isUp);
+        }
+      }
+
+      function triggerPop(el) {
+        if (!el) return;
+        el.classList.remove('pulse-pop');
+        void el.offsetWidth;
+        el.classList.add('pulse-pop');
+      }
+
+      function renderPose(num) {
+        const clamped = Math.max(1, Math.min(maxLimit, num));
+        currentNum = clamped;
+
+        const leftWrap = document.getElementById('handWrapLeft');
+        const rightWrap = document.getElementById('handWrapRight');
+        const modeTag = document.getElementById('handDemoModeTag');
+        const countEl = document.getElementById('handDemoCount');
+        const capEl = document.getElementById('handDemoCaption');
+
+        if (maxLimit === 5) {
+          rightWrap.classList.add('hidden');
+          modeTag.textContent = '單手 1~5 支';
+          applyFingers('L', clamped);
+          triggerPop(leftWrap);
+        } else {
+          rightWrap.classList.remove('hidden');
+          modeTag.textContent = '雙手 1~10 支';
+          const leftCount = Math.min(5, clamped);
+          const rightCount = Math.max(0, clamped - 5);
+          applyFingers('L', leftCount);
+          applyFingers('R', rightCount);
+          triggerPop(leftWrap);
+          if (rightCount > 0) triggerPop(rightWrap);
+        }
+
+        countEl.textContent = `示範：${clamped} 支`;
+        capEl.innerHTML = CAPTIONS[captionIdx % CAPTIONS.length];
+      }
+
+      function stepNext() {
+        if (styleMode === 'rand') {
+          let next = Math.floor(Math.random() * maxLimit) + 1;
+          if (next === currentNum && maxLimit > 1) {
+            next = (next % maxLimit) + 1;
+          }
+          currentNum = next;
+        } else {
+          currentNum = (currentNum % maxLimit) + 1;
+        }
+        if (currentNum === 1 || styleMode === 'rand') {
+          captionIdx = (captionIdx + 1) % CAPTIONS.length;
+        }
+        renderPose(currentNum);
+      }
+
+      function startLoop() {
+        clearInterval(timer);
+        if (!isVisible) return;
+        renderPose(currentNum);
+        timer = setInterval(stepNext, 1150);
+      }
+
+      function stopLoop() {
+        clearInterval(timer);
+        timer = null;
+      }
+
+      function syncVisibilityUI() {
+        const overlay = document.getElementById('handDemoOverlay');
+        const toggleBtn = document.getElementById('btnToggleHandDemo');
+        if (overlay) overlay.classList.toggle('hidden', !isVisible);
+        if (toggleBtn) {
+          toggleBtn.textContent = isVisible ? '✋ 隱藏手掌' : '✋ 手掌示意';
+          toggleBtn.classList.toggle('btn-cyan', isVisible);
+        }
+      }
+
+      function setVisible(show, persist = true) {
+        isVisible = Boolean(show);
+        if (persist) safeSetStorage(STORAGE_HAND_HIDDEN_KEY, isVisible ? '0' : '1');
+        syncVisibilityUI();
+        if (isVisible) startLoop();
+        else stopLoop();
+      }
+
+      function toggleVisible() {
+        setVisible(!isVisible, true);
+      }
+
+      function setMaxLimit(newMax) {
+        maxLimit = newMax === 5 ? 5 : 10;
+        if (currentNum > maxLimit) currentNum = 1;
+        renderPose(currentNum);
+      }
+
+      const SIZE_LIST = [
+        { key: 'sm', label: '📐 小' },
+        { key: 'md', label: '📐 中' },
+        { key: 'lg', label: '📐 大' },
+        { key: 'xl', label: '📐 特大' }
+      ];
+      let sizeIdx = Math.max(0, SIZE_LIST.findIndex(x => x.key === safeGetStorage(STORAGE_HAND_SIZE_KEY)));
+      if (sizeIdx === -1 || !safeGetStorage(STORAGE_HAND_SIZE_KEY)) sizeIdx = 1; // 預設「中」
+      let hasCustomPos = false;
+
+      function clampOverlayPosition() {
+        const overlay = document.getElementById('handDemoOverlay');
+        if (!overlay || !hasCustomPos) return;
+        const parent = overlay.parentElement;
+        if (!parent) return;
+        const pRect = parent.getBoundingClientRect();
+        const oRect = overlay.getBoundingClientRect();
+        const maxLeft = Math.max(8, pRect.width - oRect.width - 8);
+        const maxTop = Math.max(8, pRect.height - oRect.height - 8);
+        const curLeft = parseFloat(overlay.style.left) || 0;
+        const curTop = parseFloat(overlay.style.top) || 0;
+        const clampedLeft = Math.max(8, Math.min(maxLeft, curLeft));
+        const clampedTop = Math.max(8, Math.min(maxTop, curTop));
+        overlay.style.left = `${Math.round(clampedLeft)}px`;
+        overlay.style.top = `${Math.round(clampedTop)}px`;
+        overlay.style.right = 'auto';
+        overlay.style.bottom = 'auto';
+      }
+
+      function applySize(idx, persist = true) {
+        sizeIdx = ((idx % SIZE_LIST.length) + SIZE_LIST.length) % SIZE_LIST.length;
+        const item = SIZE_LIST[sizeIdx];
+        const overlay = document.getElementById('handDemoOverlay');
+        const btn = document.getElementById('btnHandDemoSize');
+        if (overlay) {
+          SIZE_LIST.forEach(sObj => overlay.classList.remove(`size-${sObj.key}`));
+          overlay.classList.add(`size-${item.key}`);
+        }
+        if (btn) btn.textContent = item.label;
+        if (persist) safeSetStorage(STORAGE_HAND_SIZE_KEY, item.key);
+        requestAnimationFrame(() => clampOverlayPosition());
+      }
+
+      function cycleSize() {
+        applySize(sizeIdx + 1, true);
+      }
+
+      function resetPosition() {
+        const overlay = document.getElementById('handDemoOverlay');
+        if (!overlay) return;
+        hasCustomPos = false;
+        overlay.style.left = '';
+        overlay.style.top = '';
+        overlay.style.right = '18px';
+        overlay.style.bottom = '18px';
+        safeSetStorage(STORAGE_HAND_POS_KEY, '');
+        showToast('✋ 手掌表演視窗已歸位至右下角');
+      }
+
+      function initDragSupport() {
+        const overlay = document.getElementById('handDemoOverlay');
+        const handle = document.getElementById('handDemoDragHandle');
+        if (!overlay || !handle) return;
+
+        // 嘗試還原上次拖曳位置
+        const savedPosRaw = safeGetStorage(STORAGE_HAND_POS_KEY);
+        if (savedPosRaw) {
+          try {
+            const parsed = JSON.parse(savedPosRaw);
+            if (typeof parsed.left === 'number' && typeof parsed.top === 'number') {
+              hasCustomPos = true;
+              overlay.style.left = `${parsed.left}px`;
+              overlay.style.top = `${parsed.top}px`;
+              overlay.style.right = 'auto';
+              overlay.style.bottom = 'auto';
+              requestAnimationFrame(() => clampOverlayPosition());
+            }
+          } catch (e) {}
+        }
+
+        let dragging = false;
+        let offsetX = 0;
+        let offsetY = 0;
+
+        handle.addEventListener('pointerdown', (e) => {
+          if (e.target.closest('button')) return;
+          const parent = overlay.parentElement;
+          if (!parent) return;
+
+          const pRect = parent.getBoundingClientRect();
+          const oRect = overlay.getBoundingClientRect();
+
+          // 轉成絕對 left/top 座標以便自由移動
+          const startLeft = oRect.left - pRect.left;
+          const startTop = oRect.top - pRect.top;
+          overlay.style.left = `${Math.round(startLeft)}px`;
+          overlay.style.top = `${Math.round(startTop)}px`;
+          overlay.style.right = 'auto';
+          overlay.style.bottom = 'auto';
+
+          hasCustomPos = true;
+          dragging = true;
+          offsetX = e.clientX - oRect.left;
+          offsetY = e.clientY - oRect.top;
+          overlay.classList.add('is-dragging');
+          if (handle.setPointerCapture) {
+            try { handle.setPointerCapture(e.pointerId); } catch (err) {}
+          }
+          e.preventDefault();
+        });
+
+        handle.addEventListener('pointermove', (e) => {
+          if (!dragging) return;
+          const parent = overlay.parentElement;
+          if (!parent) return;
+          const pRect = parent.getBoundingClientRect();
+          const oRect = overlay.getBoundingClientRect();
+
+          const rawLeft = e.clientX - pRect.left - offsetX;
+          const rawTop = e.clientY - pRect.top - offsetY;
+          const maxLeft = Math.max(8, pRect.width - oRect.width - 8);
+          const maxTop = Math.max(8, pRect.height - oRect.height - 8);
+
+          const clampedLeft = Math.max(8, Math.min(maxLeft, rawLeft));
+          const clampedTop = Math.max(8, Math.min(maxTop, rawTop));
+
+          overlay.style.left = `${Math.round(clampedLeft)}px`;
+          overlay.style.top = `${Math.round(clampedTop)}px`;
+        });
+
+        function endDrag(e) {
+          if (!dragging) return;
+          dragging = false;
+          overlay.classList.remove('is-dragging');
+          if (handle.releasePointerCapture && e && e.pointerId !== undefined) {
+            try { handle.releasePointerCapture(e.pointerId); } catch (err) {}
+          }
+          const left = parseFloat(overlay.style.left);
+          const top = parseFloat(overlay.style.top);
+          if (!isNaN(left) && !isNaN(top)) {
+            safeSetStorage(STORAGE_HAND_POS_KEY, JSON.stringify({ left, top }));
+          }
+        }
+
+        handle.addEventListener('pointerup', endDrag);
+        handle.addEventListener('pointercancel', endDrag);
+        handle.addEventListener('dblclick', (e) => {
+          if (e.target.closest('button')) return;
+          resetPosition();
+        });
+
+        window.addEventListener('resize', () => clampOverlayPosition());
+      }
+
+      function toggleStyle() {
+        styleMode = styleMode === 'seq' ? 'rand' : 'seq';
+        const btn = document.getElementById('btnHandDemoStyle');
+        if (btn) btn.textContent = styleMode === 'seq' ? '🔁 循序' : '🎲 隨機';
+        stepNext();
+      }
+
+      return {
+        init(initialMax) {
+          maxLimit = initialMax === 5 ? 5 : 10;
+          applySize(sizeIdx, false);
+          initDragSupport();
+          syncVisibilityUI();
+          if (isVisible) startLoop();
+          else renderPose(1);
+        },
+        setVisible,
+        toggleVisible,
+        setMaxLimit,
+        toggleStyle,
+        cycleSize,
+        stepNext,
+        isUserPreferredVisible() {
+          return safeGetStorage(STORAGE_HAND_HIDDEN_KEY) !== '1';
+        }
+      };
+    })();
+
+    /* ==========================================================================
+       一、主持端核心邏輯
+       ========================================================================== */
+    function initHostMode() {
+      document.body.className = 'host-mode';
+      document.getElementById('hostView').classList.remove('hidden');
+
+      let gameState = 'WAITING'; // 'WAITING' | 'PLAYING' | 'FINISHED'
+      let maxSticks = safeGetStorage(STORAGE_MAX_STICKS_KEY) === '5' ? 5 : 10;
+      let joinMode = safeGetStorage(STORAGE_JOIN_MODE_KEY) === 'open' ? 'open' : 'roster'; // 'roster' | 'open'
+      let instantSeq = 1;
+      let roster = [];
+      let rosterMap = new Map();
+      let tileElMap = new Map(); // empId -> { tile, statusEl }，避免大量 getElementById 造成卡頓
+      let currentGridLayoutKey = '';
+      let gridClickBound = false;
+      let lastScrollIntoViewAt = 0;
+      let roomId = loadOrCreateRoomId();
+      let hostPeer = null;
+      let roundHistory = loadHistoryFromStorage();
+
+      // 數支引擎狀態
+      let activePlayers = [];
+      let alivePlayers = []; // 僅保留 remaining > 0 的參賽者，確保大場次每支 O(1) 推進不卡頓
+      let totalSticks = 0;
+      let currentStick = 0;
+      let cursorIdx = -1;
+      let baseSpeedMs = 22;
+      let countingTimer = null;
+      let isPaused = false;
+      let lastCursorTileEl = null;
+      let currentNudgeEmpId = null;
+
+      // 最後 40% / 10% 換位狀態
+      let asked40 = false;
+      let asked10 = false;
+      let dynamicShuffleActive = false;
+      let usedShuffle40 = false;
+      let usedDynamic10 = false;
+
+      const savedTitle = safeGetStorage(STORAGE_TITLE_KEY);
+      if (savedTitle) document.getElementById('stageTitle').textContent = savedTitle;
+
+      function loadOrCreateRoomId() {
+        let id = safeGetStorage(STORAGE_ROOM_KEY);
+        if (!id || !/^[A-Z0-9]{6}$/.test(id)) {
+          id = generateRoomCode();
+          safeSetStorage(STORAGE_ROOM_KEY, id);
+        }
+        return id;
+      }
+
+      function generateRoomCode() {
+        const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+        let out = '';
+        for (let i = 0; i < 6; i++) out += chars[Math.floor(Math.random() * chars.length)];
+        return out;
+      }
+
+      function loadHistoryFromStorage() {
+        try {
+          const raw = safeGetStorage(STORAGE_HISTORY_KEY);
+          const arr = JSON.parse(raw);
+          return Array.isArray(arr) ? arr : [];
+        } catch (e) {
+          return [];
+        }
+      }
+
+      function saveHistoryToStorage() {
+        safeSetStorage(STORAGE_HISTORY_KEY, JSON.stringify(roundHistory));
+        document.getElementById('roundHistoryBadge').textContent = `已完賽 ${roundHistory.length} 輪`;
+      }
+
+      function addLog(msg, type = '') {
+        const logEl = document.getElementById('miniLog');
+        const time = new Date().toLocaleTimeString('zh-TW', { hour12: false });
+        const div = document.createElement('div');
+        div.className = `log-item ${type}`;
+        div.textContent = `[${time}] ${msg}`;
+        logEl.prepend(div);
+        while (logEl.children.length > 50) logEl.removeChild(logEl.lastChild);
+      }
+
+      /* ---------------- 出支上限設定（5 支 / 10 支） ---------------- */
+      function populateSimStickOptions() {
+        const sel = document.getElementById('simStickSelect');
+        if (!sel) return;
+        const prev = parseInt(sel.value, 10) || Math.min(5, maxSticks);
+        sel.innerHTML = '';
+        for (let i = 1; i <= maxSticks; i++) {
+          const opt = document.createElement('option');
+          opt.value = String(i);
+          opt.textContent = `${i} 支`;
+          sel.appendChild(opt);
+        }
+        sel.value = String(Math.min(prev, maxSticks));
+      }
+
+      function syncJoinModeUI() {
+        const isOpen = joinMode === 'open';
+        document.getElementById('btnJoinModeRoster').classList.toggle('active', !isOpen);
+        document.getElementById('btnJoinModeOpen').classList.toggle('active', isOpen);
+        document.getElementById('joinModeHint').textContent = isOpen ? '不限工號・掃碼即加入' : '需符合員工清冊';
+        const statModeEl = document.getElementById('statJoinMode');
+        if (statModeEl) {
+          statModeEl.textContent = isOpen ? '即時參加' : '清冊驗證';
+          statModeEl.style.color = isOpen ? '#6ee7b7' : '#fbbf24';
+        }
+        const simInput = document.getElementById('simEmpIdInput');
+        if (simInput) {
+          simInput.placeholder = isOpen ? '輸入任意姓名/編號' : '工號如 A001';
+          simInput.style.textTransform = isOpen ? 'none' : 'uppercase';
+        }
+        const emptyTitle = document.getElementById('emptyStageTitle');
+        const emptyDesc = document.getElementById('emptyStageDesc');
+        if (emptyTitle && emptyDesc) {
+          if (isOpen) {
+            emptyTitle.textContent = '⚡ 即時參加模式已開啟（不限員工號碼）';
+            emptyDesc.innerHTML = '免事先匯入清冊！請參與者直接掃描右側 QR Code，輸入<strong>任意姓名、暱稱或自訂編號</strong>即可即時加入舞台（無人數上限，自動高效能縮放）。';
+          } else {
+            emptyTitle.textContent = '👋 歡迎使用線上動態數支系統（無人數上限）';
+            emptyDesc.innerHTML = '請先點擊上方「<strong>📋 員工清冊</strong>」匯入 CSV / Excel 員工名單，或點擊下方按鈕一鍵生成 200 位測試員工清冊，即可立即開放大螢幕掃碼驗證！';
+          }
+        }
+      }
+
+      function setJoinMode(newMode) {
+        const target = newMode === 'open' ? 'open' : 'roster';
+        if (gameState !== 'WAITING') {
+          showToast('⚠️ 遊戲進行中或已結算，請開啟新一輪後再切換參加模式');
+          return;
+        }
+        if (target === joinMode) return;
+        joinMode = target;
+        safeSetStorage(STORAGE_JOIN_MODE_KEY, joinMode);
+        syncJoinModeUI();
+        renderQrCode();
+        updateHostHUD();
+        const label = joinMode === 'open' ? '即時參加模式（不限員工號碼）' : '清冊驗證模式（白名單工號）';
+        showToast(`🚪 已切換為：${label}`);
+        addLog(`🚪 參加模式已切換為：${label}`, 'ok');
+      }
+
+      function syncMaxSticksUI() {
+        const is5 = maxSticks === 5;
+        document.getElementById('btnMode5Sticks').classList.toggle('active', is5);
+        document.getElementById('btnMode10Sticks').classList.toggle('active', !is5);
+        document.getElementById('maxSticksHint').textContent = is5 ? '1 ~ 5 支（單手）' : '1 ~ 10 支（雙手）';
+        document.getElementById('statMaxSticks').textContent = `${maxSticks}支`;
+        populateSimStickOptions();
+        HandDemoEngine.setMaxLimit(maxSticks);
+      }
+
+      function setMaxSticksMode(newMax) {
+        const target = newMax === 5 ? 5 : 10;
+        if (gameState !== 'WAITING') {
+          showToast('⚠️ 遊戲進行中或已結算，請開啟新一輪後再調整出支上限');
+          return;
+        }
+        if (target === maxSticks) return;
+        maxSticks = target;
+        safeSetStorage(STORAGE_MAX_STICKS_KEY, String(maxSticks));
+
+        // 若從 10 支切回 5 支，自動將已鎖定超過 5 支的資料安全收斂至 5 支
+        let adjusted = 0;
+        roster.forEach(emp => {
+          if (emp.status === 'locked' && emp.count > maxSticks) {
+            emp.count = maxSticks;
+            emp.remaining = maxSticks;
+            adjusted++;
+          }
+        });
+
+        syncMaxSticksUI();
+        renderQrCode();
+        updateHostHUD();
+
+        const modeText = maxSticks === 5 ? '1 ~ 5 支（單手模式）' : '1 ~ 10 支（雙手模式）';
+        if (adjusted > 0) {
+          showToast(`🖐️ 已切換為 ${modeText}，並自動修正 ${adjusted} 筆超過上限的紀錄`);
+          addLog(`🖐️ 出支上限切換為 ${modeText}（已修正 ${adjusted} 筆超限紀錄）`, 'warn');
+        } else {
+          showToast(`🖐️ 已切換為 ${modeText}`);
+          addLog(`🖐️ 出支上限已調整為 ${modeText}`, 'ok');
+        }
+      }
+
+      /* ---------------- 清冊持久化與解析 ---------------- */
+      function loadRosterFromStorage() {
+        try {
+          const raw = safeGetStorage(STORAGE_ROSTER_KEY);
+          if (!raw) return;
+          const arr = JSON.parse(raw);
+          if (Array.isArray(arr)) {
+            setRoster(arr.map(x => ({ empId: x.empId, name: x.name })), false);
+          }
+        } catch (e) {}
+      }
+
+      function saveRosterToStorage() {
+        const minimal = roster.filter(r => !r.isInstant).map(r => ({ empId: r.empId, name: r.name }));
+        safeSetStorage(STORAGE_ROSTER_KEY, JSON.stringify(minimal));
+      }
+
+      function setRoster(rawList, notify = true) {
+        const seen = new Set();
+        const cleaned = [];
+        for (const item of rawList) {
+          const empId = String(item.empId || '').trim().toUpperCase();
+          const name = String(item.name || '').trim();
+          if (!empId || !name) continue;
+          if (['員工編號', '員編', 'EMPID', 'ID', '編號'].includes(empId)) continue;
+          if (seen.has(empId)) continue;
+          seen.add(empId);
+          cleaned.push({
+            empId,
+            name,
+            status: 'pending',
+            count: null,
+            remaining: null,
+            hits: 0,
+            deviceId: null
+          });
+        }
+
+        roster = cleaned;
+        rosterMap = new Map(roster.map(emp => [emp.empId, emp]));
+        saveRosterToStorage();
+        resetRoundState(true);
+        renderStageGrid();
+        updateHostHUD();
+        document.getElementById('rosterCountPreview').textContent = `目前清冊：${roster.length} 人`;
+        if (notify) {
+          showToast(`✅ 已成功匯入 ${roster.length} 位員工清冊`);
+          addLog(`已更新員工清冊，共 ${roster.length} 位白名單員工`, 'ok');
+        }
+      }
+
+      function parseTextLinesToRoster(text) {
+        const lines = text.split(/\r?\n/);
+        const list = [];
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (!trimmed) continue;
+          const parts = trimmed.split(/[,\t]+/).map(s => s.trim()).filter(Boolean);
+          if (parts.length >= 2) {
+            list.push({ empId: parts[0], name: parts.slice(1).join(' ') });
+          } else {
+            const spaceParts = trimmed.split(/\s+/);
+            if (spaceParts.length >= 2) {
+              list.push({ empId: spaceParts[0], name: spaceParts.slice(1).join(' ') });
+            }
+          }
+        }
+        return list;
+      }
+
+      function handleRosterFileUpload(file) {
+        if (!file) return;
+        const ext = file.name.split('.').pop().toLowerCase();
+        if (ext === 'xlsx' || ext === 'xls') {
+          const reader = new FileReader();
+          reader.onload = (e) => {
+            try {
+              const wb = XLSX.read(new Uint8Array(e.target.result), { type: 'array' });
+              const firstSheet = wb.Sheets[wb.SheetNames[0]];
+              const rows = XLSX.utils.sheet_to_json(firstSheet, { header: 1 });
+              const list = rows
+                .filter(r => Array.isArray(r) && r.length >= 2)
+                .map(r => ({ empId: r[0], name: r[1] }));
+              if (list.length === 0) {
+                showToast('⚠️ Excel 內未偵測到有效「工號、姓名」資料');
+                return;
+              }
+              setRoster(list);
+              closeModal('rosterModal');
+            } catch (err) {
+              showToast('❌ Excel 解析失敗，請確認檔案格式');
+            }
+          };
+          reader.readAsArrayBuffer(file);
+        } else {
+          Papa.parse(file, {
+            skipEmptyLines: true,
+            complete: (res) => {
+              if (res.data && res.data.length > 0 && res.data[0].length >= 2) {
+                setRoster(res.data.map(r => ({ empId: r[0], name: r[1] })));
+                closeModal('rosterModal');
+              } else {
+                const reader = new FileReader();
+                reader.onload = (ev) => {
+                  const fallback = parseTextLinesToRoster(ev.target.result);
+                  if (fallback.length === 0) showToast('⚠️ 檔案內未偵測到有效「工號、姓名」資料');
+                  else { setRoster(fallback); closeModal('rosterModal'); }
+                };
+                reader.readAsText(file, 'UTF-8');
+              }
+            },
+            error: () => showToast('❌ CSV/TXT 讀取失敗')
+          });
+        }
+      }
+
+      function generate200TestRoster() {
+        const surnames = ['陳', '林', '黃', '張', '李', '王', '吳', '劉', '蔡', '楊', '許', '鄭', '謝', '郭', '洪', '曾', '邱', '廖', '賴', '周'];
+        const given1 = ['冠', '承', '宇', '柏', '彥', '品', '宥', '子', '家', '志', '雅', '怡', '佳', '詩', '心', '沛', '思', '羽', '欣', '美'];
+        const given2 = ['廷', '翰', '軒', '宇', '豪', '宏', '明', '傑', '華', '翔', '婷', '君', '潔', '涵', '瑜', '萱', '伶', '蓉', '琪', '玲'];
+        const list = [];
+        for (let i = 1; i <= 200; i++) {
+          const empId = 'A' + String(i).padStart(3, '0');
+          const name = surnames[i % surnames.length] + given1[(i * 3) % given1.length] + given2[(i * 7) % given2.length];
+          list.push({ empId, name });
+        }
+        setRoster(list);
+      }
+
+      function downloadSampleCsv() {
+        const bom = '\uFEFF';
+        const rows = [
+          '員工編號,員工姓名',
+          'A001,王小明',
+          'A002,陳美玲',
+          'A003,張志豪',
+          'A004,林佳穎',
+          'A005,黃冠宇'
+        ].join('\r\n');
+        const blob = new Blob([bom + rows], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = '員工清冊範本_數支遊戲.csv';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      }
+
+      /* ---------------- 匯出結果紀錄（Excel .xlsx，含歷屆中獎總覽＋本輪明細） ---------------- */
+      function exportResultsToExcel() {
+        if (roundHistory.length === 0 && roster.filter(e => e.status === 'locked').length === 0) {
+          showToast('⚠️ 目前尚無任何開獎或報到紀錄可供匯出');
+          return;
+        }
+        const timestamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
+
+        if (window.XLSX) {
+          const wb = XLSX.utils.book_new();
+
+          const summaryRows = [
+            ['輪次', '開獎時間', '出支上限', '中獎員工編號', '中獎員工姓名', '中獎者出支數', '參戰總人數', '全場總支數', '是否40%換位', '是否10%動態換位']
+          ];
+          roundHistory.forEach((h, idx) => {
+            summaryRows.push([
+              `第 ${idx + 1} 輪`,
+              h.time,
+              `${h.maxSticks || 10} 支`,
+              h.winnerId,
+              h.winnerName,
+              h.winnerCount,
+              h.activeCount,
+              h.totalSticks,
+              h.shuffled40 ? '是' : '否',
+              h.dynamic10 ? '是' : '否'
+            ]);
+          });
+          const wsSummary = XLSX.utils.aoa_to_sheet(summaryRows);
+          XLSX.utils.book_append_sheet(wb, wsSummary, '歷屆中獎總覽');
+
+          const detailRows = [
+            ['員工編號', '員工姓名', '報到狀態', '原始出支數', '被點次數', '點過後剩餘支數', '是否本輪中獎']
+          ];
+          const latestWinnerId = roundHistory.length > 0 ? roundHistory[roundHistory.length - 1].winnerId : '';
+          roster.forEach(emp => {
+            const isLocked = emp.status === 'locked';
+            detailRows.push([
+              emp.empId,
+              emp.name,
+              isLocked ? '已報到鎖定' : '未報到',
+              isLocked ? emp.count : 0,
+              isLocked ? emp.hits : 0,
+              isLocked ? (emp.remaining !== null ? emp.remaining : emp.count) : 0,
+              (gameState === 'FINISHED' && emp.empId === latestWinnerId) ? '🏆 中獎' : ''
+            ]);
+          });
+          const wsDetail = XLSX.utils.aoa_to_sheet(detailRows);
+          XLSX.utils.book_append_sheet(wb, wsDetail, '本輪全員明細');
+
+          XLSX.writeFile(wb, `線上數支遊戲結果紀錄_${timestamp}.xlsx`);
+          showToast('📊 已匯出 Excel 結果紀錄（.xlsx）');
+          addLog('📊 已匯出活動結果紀錄檔案 (.xlsx)', 'ok');
+        } else {
+          const bom = '\uFEFF';
+          const lines = ['輪次,開獎時間,出支上限,中獎工號,中獎姓名,中獎者出支,參戰人數,全場總支數'];
+          roundHistory.forEach((h, idx) => {
+            lines.push(`第${idx + 1}輪,${h.time},${h.maxSticks || 10}支,${h.winnerId},${h.winnerName},${h.winnerCount},${h.activeCount},${h.totalSticks}`);
+          });
+          const blob = new Blob([bom + lines.join('\r\n')], { type: 'text/csv;charset=utf-8;' });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `線上數支遊戲結果紀錄_${timestamp}.csv`;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          URL.revokeObjectURL(url);
+          showToast('📊 已匯出 CSV 結果紀錄');
+        }
+      }
+
+      /* ---------------- 舞台自適應網格渲染（無人數上限・超過 240 人自動高效能模式） ---------------- */
+      function computeGridLayout(count) {
+        if (count <= 0) return { cols: 1, rows: 1, idPx: 14, namePx: 18, statusPx: 12, perfMode: false };
+        const perfMode = count > PERF_MODE_THRESHOLD;
+        if (perfMode) {
+          const cols = count > 800 ? 18 : 16;
+          return { cols, rows: Math.ceil(count / cols), idPx: 10, namePx: 12, statusPx: 9.5, perfMode: true };
+        }
+        const aspect = 1.55;
+        let cols = Math.ceil(Math.sqrt(count * aspect));
+        cols = Math.max(2, Math.min(16, cols));
+        if (count > 160) cols = 16;
+        const rows = Math.ceil(count / cols);
+
+        let idPx = 15, namePx = 22, statusPx = 13;
+        if (count > 140) { idPx = 10; namePx = 13; statusPx = 9.5; }
+        else if (count > 90) { idPx = 11; namePx = 15; statusPx = 10.5; }
+        else if (count > 48) { idPx = 12; namePx = 17; statusPx = 11; }
+        else if (count > 20) { idPx = 14; namePx = 20; statusPx = 12; }
+        return { cols, rows, idPx, namePx, statusPx, perfMode: false };
+      }
+
+      function ensureGridClickDelegation() {
+        if (gridClickBound) return;
+        const gridEl = document.getElementById('stageGrid');
+        if (!gridEl) return;
+        gridClickBound = true;
+        gridEl.addEventListener('click', (e) => {
+          if (gameState !== 'WAITING') return;
+          const tile = e.target.closest('.emp-tile');
+          if (!tile) return;
+          const empId = tile.dataset.emp;
+          const emp = rosterMap.get(empId);
+          if (!emp || emp.status !== 'locked') return;
+          showConfirmDialog(
+            `確定要強制釋放【${emp.empId} ${emp.name}】的鎖定狀態，讓人員重新掃碼登入嗎？`,
+            () => releaseEmployeeSlot(empId, '主持人強制釋放'),
+            '釋放鎖定'
+          );
+        });
+      }
+
+      function createTileElement(emp, idPx, namePx, statusPx) {
+        const tile = document.createElement('div');
+        tile.id = `tile-${emp.empId}`;
+        tile.className = 'emp-tile';
+        tile.dataset.emp = emp.empId;
+
+        const idDiv = document.createElement('div');
+        idDiv.className = 'emp-id';
+        idDiv.style.fontSize = `${idPx}px`;
+        idDiv.textContent = emp.empId;
+
+        const nameDiv = document.createElement('div');
+        nameDiv.className = 'emp-name';
+        nameDiv.style.fontSize = `${namePx}px`;
+        nameDiv.textContent = emp.name;
+
+        const statusDiv = document.createElement('div');
+        statusDiv.className = 'emp-status';
+        statusDiv.style.fontSize = `${statusPx}px`;
+        statusDiv.textContent = '待掃碼';
+
+        tile.appendChild(idDiv);
+        tile.appendChild(nameDiv);
+        tile.appendChild(statusDiv);
+
+        tileElMap.set(emp.empId, { tile, idDiv, nameDiv, statusEl: statusDiv });
+        return tile;
+      }
+
+      function applyGridLayoutStyles(gridEl, layout) {
+        gridEl.classList.toggle('perf-mode', layout.perfMode);
+        gridEl.style.gridTemplateColumns = `repeat(${layout.cols}, minmax(0, 1fr))`;
+        gridEl.style.gridTemplateRows = layout.perfMode ? 'none' : `repeat(${layout.rows}, minmax(0, 1fr))`;
+      }
+
+      function renderStageGrid() {
+        ensureGridClickDelegation();
+        const gridEl = document.getElementById('stageGrid');
+        const emptyBox = document.getElementById('emptyStageBox');
+        tileElMap.clear();
+        if (roster.length === 0) {
+          gridEl.innerHTML = '';
+          gridEl.classList.remove('perf-mode');
+          currentGridLayoutKey = '';
+          emptyBox.classList.remove('hidden');
+          return;
+        }
+        emptyBox.classList.add('hidden');
+
+        const layout = computeGridLayout(roster.length);
+        currentGridLayoutKey = `${layout.cols}-${layout.rows}-${layout.idPx}-${layout.perfMode}`;
+        applyGridLayoutStyles(gridEl, layout);
+
+        const frag = document.createDocumentFragment();
+        for (let i = 0; i < roster.length; i++) {
+          const emp = roster[i];
+          frag.appendChild(createTileElement(emp, layout.idPx, layout.namePx, layout.statusPx));
+        }
+        gridEl.innerHTML = '';
+        gridEl.appendChild(frag);
+
+        for (let i = 0; i < roster.length; i++) {
+          updateSingleTile(roster[i]);
+        }
+      }
+
+      // 即時參加增量渲染：僅新增 1 格 DOM，避免每來 1 人就重繪全場導致卡頓
+      function appendSingleTileIncremental(emp) {
+        ensureGridClickDelegation();
+        const gridEl = document.getElementById('stageGrid');
+        const emptyBox = document.getElementById('emptyStageBox');
+        emptyBox.classList.add('hidden');
+
+        const layout = computeGridLayout(roster.length);
+        const layoutKey = `${layout.cols}-${layout.rows}-${layout.idPx}-${layout.perfMode}`;
+
+        const tile = createTileElement(emp, layout.idPx, layout.namePx, layout.statusPx);
+        gridEl.appendChild(tile);
+        updateSingleTile(emp);
+
+        if (layoutKey !== currentGridLayoutKey) {
+          const prevPerf = currentGridLayoutKey.endsWith('-true');
+          currentGridLayoutKey = layoutKey;
+          applyGridLayoutStyles(gridEl, layout);
+          // 僅在字級變化或剛進入高效能模式時批次微調既有格子字級
+          if (!layout.perfMode || !prevPerf) {
+            tileElMap.forEach((refs) => {
+              refs.idDiv.style.fontSize = `${layout.idPx}px`;
+              refs.nameDiv.style.fontSize = `${layout.namePx}px`;
+              refs.statusEl.style.fontSize = `${layout.statusPx}px`;
+            });
+          }
+        }
+      }
+
+      function updateSingleTile(emp) {
+        const refs = tileElMap.get(emp.empId);
+        if (!refs) return;
+        const el = refs.tile;
+        const statusEl = refs.statusEl;
+        el.classList.remove('is-locked', 'is-revealed', 'is-depleted', 'is-absent', 'is-cursor', 'is-winner');
+
+        if (gameState === 'WAITING') {
+          if (emp.status === 'locked') {
+            el.classList.add('is-locked');
+            statusEl.textContent = '✅ 已鎖定';
+          } else {
+            statusEl.textContent = '待掃碼';
+          }
+        } else {
+          if (emp.status === 'locked') {
+            const rem = emp.remaining !== null ? emp.remaining : emp.count;
+            el.classList.add('is-revealed');
+            if (rem <= 0) {
+              el.classList.add('is-depleted');
+              statusEl.textContent = `剩 0/${emp.count}支`;
+            } else {
+              statusEl.textContent = `剩 ${rem}/${emp.count}支`;
+            }
+          } else {
+            el.classList.add('is-absent');
+            statusEl.textContent = '未報到';
+          }
+        }
+      }
+
+      function updateHostHUD() {
+        const lockedCount = roster.filter(e => e.status === 'locked').length;
+        document.getElementById('statRoster').textContent = roster.length;
+        document.getElementById('statLocked').textContent = lockedCount;
+        document.getElementById('statTotalSticks').textContent = gameState === 'WAITING' ? '--' : totalSticks;
+        document.getElementById('statMaxSticks').textContent = `${maxSticks}支`;
+        document.getElementById('roundHistoryBadge').textContent = `已完賽 ${roundHistory.length} 輪`;
+
+        const stateEl = document.getElementById('statGameState');
+        const qrBox = document.getElementById('qrBox');
+        const startBtn = document.getElementById('btnStartCounting');
+        const mode5Btn = document.getElementById('btnMode5Sticks');
+        const mode10Btn = document.getElementById('btnMode10Sticks');
+        const joinRosterBtn = document.getElementById('btnJoinModeRoster');
+        const joinOpenBtn = document.getElementById('btnJoinModeOpen');
+
+        if (gameState === 'WAITING') {
+          stateEl.textContent = '開放掃碼';
+          stateEl.style.color = '#6ee7b7';
+          qrBox.classList.remove('is-locked');
+          startBtn.classList.remove('is-playing');
+          startBtn.disabled = false;
+          startBtn.textContent = '🚀 鎖定名單／開始動態數支';
+          mode5Btn.disabled = false;
+          mode10Btn.disabled = false;
+          joinRosterBtn.disabled = false;
+          joinOpenBtn.disabled = false;
+        } else if (gameState === 'PLAYING') {
+          stateEl.textContent = isPaused ? '數支暫停' : '數支進行中';
+          stateEl.style.color = '#fbbf24';
+          qrBox.classList.add('is-locked');
+          startBtn.classList.add('is-playing');
+          startBtn.disabled = false;
+          startBtn.textContent = isPaused ? '▶️ 繼續動態數支' : '⏸️ 暫停動態數支';
+          mode5Btn.disabled = true;
+          mode10Btn.disabled = true;
+          joinRosterBtn.disabled = true;
+          joinOpenBtn.disabled = true;
+        } else {
+          stateEl.textContent = '已結算中獎';
+          stateEl.style.color = '#f43f5e';
+          qrBox.classList.add('is-locked');
+          startBtn.classList.remove('is-playing');
+          startBtn.disabled = true;
+          startBtn.textContent = '🏆 本輪已結算（請點新一輪）';
+          mode5Btn.disabled = true;
+          mode10Btn.disabled = true;
+          joinRosterBtn.disabled = true;
+          joinOpenBtn.disabled = true;
+        }
+      }
+
+      function releaseEmployeeSlot(empId, reason = '人員主動退出') {
+        const emp = rosterMap.get(empId);
+        if (!emp) return;
+        if (emp.isInstant) {
+          roster = roster.filter(r => r.empId !== empId);
+          rosterMap.delete(empId);
+          renderStageGrid();
+        } else {
+          emp.status = 'pending';
+          emp.count = null;
+          emp.remaining = null;
+          emp.hits = 0;
+          emp.deviceId = null;
+          updateSingleTile(emp);
+        }
+        updateHostHUD();
+        addLog(`🚪 ${emp.empId} ${emp.name} 已退出並釋放（${reason}）`, 'warn');
+        showToast(`✅ ${emp.name}（${emp.empId}）已釋放，現在可重新加入`);
+        if (currentNudgeEmpId === empId) {
+          document.getElementById('nudgeBanner').classList.add('hidden');
+          currentNudgeEmpId = null;
+        }
+      }
+
+      function showNudgeBanner(emp) {
+        currentNudgeEmpId = emp.empId;
+        document.getElementById('nudgeText').textContent =
+          `工號 ${emp.empId}（${emp.name}）已有前一位人員鎖定，後方有新裝置嘗試登入！系統已禁止覆蓋，請前一位人員於手機點擊「退出並釋放工號」，或由主持人協助強制釋放。`;
+        document.getElementById('nudgeBanner').classList.remove('hidden');
+      }
+
+      function findEmployeeByInput(rawInput) {
+        const trimmed = String(rawInput || '').trim();
+        const upper = trimmed.toUpperCase();
+        if (rosterMap.has(upper)) return rosterMap.get(upper);
+        if (joinMode === 'open') {
+          return roster.find(r => r.name.toUpperCase() === upper) || null;
+        }
+        return null;
+      }
+
+      // 統一的報到驗證邏輯（供 PeerJS 與單機模擬共用，支援清冊驗證／即時參加模式）
+      function processSubmission(rawInput, count, deviceId) {
+        if (gameState !== 'WAITING') {
+          return {
+            status: 'REJECTED_STARTED',
+            maxSticks,
+            joinMode,
+            message: '⛔ 本輪遊戲已經開始，無法再驗證加入或更改支數，請等待下一輪重新開放！'
+          };
+        }
+        const trimmed = String(rawInput || '').trim().slice(0, 20);
+        const upperKey = trimmed.toUpperCase();
+        if (!trimmed) {
+          return {
+            status: 'ERROR',
+            maxSticks,
+            joinMode,
+            message: joinMode === 'open' ? '❌ 請輸入姓名、暱稱或自訂編號！' : '❌ 請輸入員工編號！'
+          };
+        }
+        if (isNaN(count) || count < 1 || count > maxSticks) {
+          return {
+            status: 'ERROR',
+            maxSticks,
+            joinMode,
+            message: `❌ 本輪設定出支上限為 ${maxSticks} 支，支數必須介於 1 ~ ${maxSticks} 之間！`
+          };
+        }
+
+        let emp = findEmployeeByInput(trimmed);
+        let isNewInstant = false;
+
+        if (!emp) {
+          if (joinMode === 'roster') {
+            addLog(`❌ 驗證失敗：查無工號 ${upperKey}`, 'err');
+            return {
+              status: 'INVALID_EMP',
+              maxSticks,
+              joinMode,
+              message: `❌ 查無此員工編號「${upperKey}」，請確認後重新輸入！`
+            };
+          }
+
+          // 即時參加模式：無人數上限，自動產生唯一安全 ID 並即時增量加入舞台
+          let generatedId = '';
+          if (/^[A-Z0-9_-]{1,12}$/.test(upperKey) && !rosterMap.has(upperKey)) {
+            generatedId = upperKey;
+          } else {
+            do {
+              generatedId = 'P' + String(instantSeq++).padStart(3, '0');
+            } while (rosterMap.has(generatedId));
+          }
+
+          emp = {
+            empId: generatedId,
+            name: trimmed,
+            status: 'pending',
+            count: null,
+            remaining: null,
+            hits: 0,
+            deviceId: null,
+            isInstant: true
+          };
+          roster.push(emp);
+          rosterMap.set(emp.empId, emp);
+          isNewInstant = true;
+        }
+
+        if (emp.status === 'locked') {
+          showNudgeBanner(emp);
+          addLog(`⚠️ 攔截重複登入 ${emp.empId}（${emp.name}）：禁止覆蓋，已提醒前一位退出`, 'warn');
+          return {
+            status: 'OCCUPIED',
+            maxSticks,
+            joinMode,
+            empId: emp.empId,
+            name: emp.name,
+            message: `⚠️ 「${emp.name} (${emp.empId})」目前已有前一位人員鎖定，系統禁止覆蓋！已主動通知大螢幕，請前一位人員點擊「退出並釋放」後再重新輸入。`
+          };
+        }
+
+        emp.status = 'locked';
+        emp.count = count;
+        emp.remaining = count;
+        emp.hits = 0;
+        emp.deviceId = deviceId || ('dev-' + Date.now());
+        if (isNewInstant) appendSingleTileIncremental(emp);
+        else updateSingleTile(emp);
+        updateHostHUD();
+        addLog(
+          isNewInstant
+            ? `⚡ ${emp.empId} ${emp.name} 即時加入並鎖定出支`
+            : `✅ ${emp.empId} ${emp.name} 驗證成功並鎖定出支`,
+          'ok'
+        );
+
+        return {
+          status: 'OK',
+          maxSticks,
+          joinMode,
+          empId: emp.empId,
+          name: emp.name,
+          count: emp.count
+        };
+      }
+
+      /* ---------------- PeerJS 主持端通訊閘門與 QR Code ---------------- */
+      function getPlayerJoinUrl() {
+        const base = window.location.href.split('?')[0].split('#')[0];
+        return `${base}?room=${roomId}&max=${maxSticks}&mode=${joinMode}`;
+      }
+
+      function renderQrCode() {
+        const qrContainer = document.getElementById('qrcode');
+        qrContainer.innerHTML = '';
+        document.getElementById('roomCodeDisplay').textContent = roomId;
+        if (window.QRCode) {
+          new QRCode(qrContainer, {
+            text: getPlayerJoinUrl(),
+            width: 156,
+            height: 156,
+            colorDark: '#0f172a',
+            colorLight: '#ffffff',
+            correctLevel: QRCode.CorrectLevel.M
+          });
+        }
+      }
+
+      function initHostPeer() {
+        if (hostPeer) {
+          try { hostPeer.destroy(); } catch (e) {}
+        }
+        const dot = document.getElementById('connDot');
+        const txt = document.getElementById('connText');
+        dot.className = 'conn-dot';
+        txt.textContent = '連線伺服器中...';
+
+        if (typeof Peer === 'undefined') {
+          dot.className = 'conn-dot error';
+          txt.textContent = '離線模式';
+          renderQrCode();
+          return;
+        }
+
+        const peerId = `countgame-room-${roomId}`;
+        try {
+          hostPeer = new Peer(peerId, { debug: 1 });
+        } catch (e) {
+          dot.className = 'conn-dot error';
+          txt.textContent = '連線異常';
+          renderQrCode();
+          return;
+        }
+
+        hostPeer.on('open', () => {
+          dot.className = 'conn-dot online';
+          txt.textContent = `房間就緒 (${roomId})`;
+          renderQrCode();
+          addLog(`房間 ${roomId} 已連線就緒，開放員工掃碼（上限 ${maxSticks} 支）`, 'ok');
+        });
+
+        hostPeer.on('disconnected', () => {
+          dot.className = 'conn-dot';
+          txt.textContent = '斷線重連中...';
+          setTimeout(() => {
+            if (hostPeer && !hostPeer.destroyed) hostPeer.reconnect();
+          }, 1500);
+        });
+
+        hostPeer.on('error', (err) => {
+          if (err.type === 'unavailable-id') {
+            roomId = generateRoomCode();
+            safeSetStorage(STORAGE_ROOM_KEY, roomId);
+            initHostPeer();
+            return;
+          }
+          dot.className = 'conn-dot error';
+          txt.textContent = '連線異常';
+          addLog(`PeerJS 連線訊息：${err.type}`, 'err');
+        });
+
+        hostPeer.on('connection', (conn) => {
+          conn.on('data', (payload) => {
+            if (!payload || typeof payload !== 'object') return;
+            const action = payload.action || 'SUBMIT';
+
+            if (action === 'GET_CONFIG') {
+              conn.send({
+                status: 'CONFIG',
+                maxSticks,
+                joinMode,
+                gameState
+              });
+              return;
+            }
+
+            const rawEmpInput = String(payload.empId || '').trim();
+            const empId = rawEmpInput.toUpperCase();
+            const deviceId = String(payload.deviceId || '').trim();
+
+            if (gameState !== 'WAITING') {
+              conn.send({
+                status: 'REJECTED_STARTED',
+                maxSticks,
+                message: '⛔ 本輪遊戲已經開始，無法再驗證加入或更改支數，請等待下一輪重新開放！'
+              });
+              addLog(`🔒 已攔截 ${empId || '未知工號'} 的逾時請求（遊戲已開始）`, 'err');
+              return;
+            }
+
+            if (action === 'RELEASE') {
+              const emp = rosterMap.get(empId);
+              if (emp && emp.status === 'locked' && (!emp.deviceId || emp.deviceId === deviceId)) {
+                releaseEmployeeSlot(empId, '員工於手機主動退出');
+                conn.send({ status: 'RELEASED', maxSticks, empId, name: emp.name });
+              } else {
+                conn.send({ status: 'ERROR', maxSticks, message: '⚠️ 無法釋放：此工號目前非由您的裝置鎖定，或已處於未鎖定狀態。' });
+              }
+              return;
+            }
+
+            if (action === 'NUDGE_RELEASE') {
+              const emp = findEmployeeByInput(rawEmpInput);
+              if (!emp) {
+                conn.send({ status: 'INVALID_EMP', maxSticks, message: `❌ 查無此員工編號「${empId}」` });
+              } else if (emp.status === 'locked') {
+                showNudgeBanner(emp);
+                addLog(`🔔 收到工號 ${emp.empId}（${emp.name}）退出提醒，請前一位人員退出！`, 'warn');
+                conn.send({
+                  status: 'OCCUPIED',
+                  maxSticks,
+                  empId: emp.empId,
+                  name: emp.name,
+                  message: `🔔 已再次通知大螢幕！請前一位使用工號 ${emp.empId}（${emp.name}）的人員點擊「退出並釋放工號」後再重新送出。`
+                });
+              } else {
+                conn.send({
+                  status: 'AVAILABLE_NOW',
+                  maxSticks,
+                  message: `✅ 工號 ${emp.empId}（${emp.name}）目前已經釋放空出，請直接點擊「驗證並鎖定送出」！`
+                });
+              }
+              return;
+            }
+
+            const count = parseInt(payload.count, 10);
+            const resp = processSubmission(rawEmpInput, count, deviceId);
+            conn.send(resp);
+          });
+        });
+      }
+
+      /* ---------------- 換位引擎（最後 40% 洗牌 & 最後 10% 動態換位，高效能零重排） ---------------- */
+      function performFullShuffle() {
+        if (activePlayers.length < 2) return;
+        for (let i = activePlayers.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          const temp = activePlayers[i];
+          activePlayers[i] = activePlayers[j];
+          activePlayers[j] = temp;
+        }
+        // 同步重建 alivePlayers 順序
+        alivePlayers = activePlayers.filter(e => e.remaining > 0);
+        cursorIdx = -1;
+
+        const gridEl = document.getElementById('stageGrid');
+        const isPerf = roster.length > PERF_MODE_THRESHOLD;
+        const frag = document.createDocumentFragment();
+        const activeSet = new Set(activePlayers);
+
+        for (let i = 0; i < activePlayers.length; i++) {
+          const refs = tileElMap.get(activePlayers[i].empId);
+          if (refs) {
+            if (!isPerf) refs.tile.classList.add('is-swapped');
+            frag.appendChild(refs.tile);
+          }
+        }
+        for (let i = 0; i < roster.length; i++) {
+          if (!activeSet.has(roster[i])) {
+            const refs = tileElMap.get(roster[i].empId);
+            if (refs) frag.appendChild(refs.tile);
+          }
+        }
+        gridEl.appendChild(frag);
+        if (!isPerf) {
+          setTimeout(() => {
+            for (let i = 0; i < activePlayers.length; i++) {
+              const refs = tileElMap.get(activePlayers[i].empId);
+              if (refs) refs.tile.classList.remove('is-swapped');
+            }
+          }, 380);
+        }
+
+        AudioEngine.playReveal();
+        addLog('🔀 已執行全場隨機換位洗牌！', 'warn');
+        showToast('🔀 全場參賽者已隨機換位完成！');
+      }
+
+      function performDynamicSwapStep() {
+        if (alivePlayers.length < 2) return;
+
+        const a = Math.floor(Math.random() * alivePlayers.length);
+        let b = Math.floor(Math.random() * alivePlayers.length);
+        if (a === b) b = (a + 1) % alivePlayers.length;
+
+        const empA = alivePlayers[a];
+        const empB = alivePlayers[b];
+        alivePlayers[a] = empB;
+        alivePlayers[b] = empA;
+
+        const refsA = tileElMap.get(empA.empId);
+        const refsB = tileElMap.get(empB.empId);
+        if (refsA && refsB) {
+          swapDomNodes(refsA.tile, refsB.tile);
+          if (roster.length <= PERF_MODE_THRESHOLD) {
+            refsA.tile.classList.remove('is-swapped');
+            refsB.tile.classList.remove('is-swapped');
+            void refsA.tile.offsetWidth;
+            refsA.tile.classList.add('is-swapped');
+            refsB.tile.classList.add('is-swapped');
+          }
+        }
+      }
+
+      /* ---------------- 動態數支與智慧尾聲慢動作引擎（保證全數歸零） ---------------- */
+      function startOrToggleCounting() {
+        if (gameState === 'PLAYING') {
+          isPaused = !isPaused;
+          updateHostHUD();
+          if (!isPaused) scheduleNextStickStep();
+          else clearTimeout(countingTimer);
+          return;
+        }
+
+        if (gameState !== 'WAITING') return;
+
+        activePlayers = roster.filter(e => e.status === 'locked');
+        if (activePlayers.length === 0) {
+          showToast('⚠️ 目前尚無任何員工報到鎖定，無法開始數支！');
+          return;
+        }
+
+        // 開始數支時自動收起等待中的手掌表演，避免遮擋 200 人舞台（仍可隨時手動打開）
+        HandDemoEngine.setVisible(false, false);
+
+        gameState = 'PLAYING';
+        isPaused = false;
+        currentStick = 0;
+        cursorIdx = -1;
+        asked40 = false;
+        asked10 = false;
+        dynamicShuffleActive = false;
+        usedShuffle40 = false;
+        usedDynamic10 = false;
+
+        activePlayers.forEach(emp => {
+          emp.remaining = emp.count;
+          emp.hits = 0;
+        });
+        alivePlayers = activePlayers.slice();
+        totalSticks = activePlayers.reduce((sum, emp) => sum + emp.count, 0);
+        document.getElementById('nudgeBanner').classList.add('hidden');
+        document.getElementById('dynShuffleBadge').classList.add('hidden');
+
+        roster.forEach(emp => updateSingleTile(emp));
+        updateHostHUD();
+        AudioEngine.playReveal();
+
+        const pill = document.getElementById('liveCounterPill');
+        pill.classList.remove('hidden');
+        document.getElementById('liveCounterNum').textContent = `0 / ${totalSticks}`;
+        document.getElementById('liveCounterTarget').textContent = `全場 ${activePlayers.length} 人參戰・翻牌完成！`;
+        document.getElementById('slowMoBadge').classList.add('hidden');
+
+        addLog(`🚀 鎖定名單！共 ${activePlayers.length} 人參戰（上限 ${maxSticks} 支），全場總支數 ${totalSticks} 支，開始動態數支！`, 'ok');
+
+        countingTimer = setTimeout(() => {
+          if (gameState === 'PLAYING' && !isPaused) stepOneStick();
+        }, 1000);
+      }
+
+      function stepOneStick() {
+        if (gameState !== 'PLAYING' || isPaused) return;
+
+        if (dynamicShuffleActive && currentStick < totalSticks - 1) {
+          performDynamicSwapStep();
+        }
+
+        if (alivePlayers.length === 0) return;
+        cursorIdx = (cursorIdx + 1) % alivePlayers.length;
+        const emp = alivePlayers[cursorIdx];
+
+        currentStick++;
+        const remainingGlobal = totalSticks - currentStick;
+        const slowMoChecked = document.getElementById('chkSlowMo').checked;
+        const isInSlowMo = slowMoChecked && remainingGlobal <= 20;
+
+        emp.hits++;
+        emp.remaining--;
+        if (emp.remaining <= 0) {
+          alivePlayers.splice(cursorIdx, 1);
+          cursorIdx--; // 讓下一輪 (cursorIdx + 1) 精準指向原本的下一位
+        }
+        updateSingleTile(emp);
+
+        if (lastCursorTileEl) lastCursorTileEl.classList.remove('is-cursor');
+        const refs = tileElMap.get(emp.empId);
+        if (refs && refs.tile) {
+          refs.tile.classList.add('is-cursor');
+          lastCursorTileEl = refs.tile;
+          if (roster.length > PERF_MODE_THRESHOLD) {
+            const nowMs = performance.now();
+            if (isInSlowMo || nowMs - lastScrollIntoViewAt > 260) {
+              lastScrollIntoViewAt = nowMs;
+              refs.tile.scrollIntoView({ block: 'nearest', behavior: 'auto' });
+            }
+          }
+        }
+
+        document.getElementById('liveCounterNum').textContent = `${currentStick} / ${totalSticks}`;
+        document.getElementById('liveCounterTarget').textContent = `${emp.empId} ${emp.name}（剩 ${emp.remaining}/${emp.count} 支）`;
+        document.getElementById('slowMoBadge').classList.toggle('hidden', !isInSlowMo);
+
+        AudioEngine.playTick(isInSlowMo, remainingGlobal);
+
+        if (currentStick >= totalSticks) {
+          finishCounting(emp);
+          return;
+        }
+
+        const threshold40 = Math.floor(totalSticks * 0.4);
+        const threshold10 = Math.max(1, Math.floor(totalSticks * 0.1));
+
+        if (
+          document.getElementById('chkAsk40').checked &&
+          !asked40 &&
+          totalSticks >= 5 &&
+          remainingGlobal <= threshold40 &&
+          remainingGlobal > threshold10
+        ) {
+          asked40 = true;
+          isPaused = true;
+          updateHostHUD();
+          document.getElementById('shuffle40Desc').textContent =
+            `目前已數完 ${currentStick} 支，剩餘最後 ${remainingGlobal} 支（約 40%）。請問是否要立即將全場參賽者隨機換位後繼續數支？`;
+          openModal('shuffle40Modal');
+          return;
+        }
+
+        if (
+          document.getElementById('chkAsk10').checked &&
+          !asked10 &&
+          totalSticks >= 5 &&
+          remainingGlobal <= threshold10
+        ) {
+          asked10 = true;
+          isPaused = true;
+          updateHostHUD();
+          document.getElementById('shuffle10Desc').textContent =
+            `目前已數完 ${currentStick} 支，僅剩最後 ${remainingGlobal} 支（約 10%）！請問是否開啟「動態換位」模式一路狂飆到開獎？`;
+          openModal('shuffle10Modal');
+          return;
+        }
+
+        scheduleNextStickStep();
+      }
+
+      function scheduleNextStickStep() {
+        const remainingGlobal = totalSticks - currentStick;
+        const slowMoChecked = document.getElementById('chkSlowMo').checked;
+        let delay = baseSpeedMs;
+        if (slowMoChecked && remainingGlobal <= 20) {
+          delay = Math.max(baseSpeedMs, 350);
+        }
+        countingTimer = setTimeout(stepOneStick, delay);
+      }
+
+      function finishCounting(winnerEmp) {
+        gameState = 'FINISHED';
+        clearTimeout(countingTimer);
+        updateHostHUD();
+        document.getElementById('slowMoBadge').classList.add('hidden');
+        document.getElementById('dynShuffleBadge').classList.add('hidden');
+
+        if (lastCursorTileEl) lastCursorTileEl.classList.remove('is-cursor');
+        const winRefs = tileElMap.get(winnerEmp.empId);
+        if (winRefs && winRefs.tile) {
+          winRefs.tile.classList.add('is-winner');
+          if (roster.length > PERF_MODE_THRESHOLD) {
+            winRefs.tile.scrollIntoView({ block: 'center', behavior: 'smooth' });
+          }
+        }
+
+        roundHistory.push({
+          time: new Date().toLocaleString('zh-TW', { hour12: false }),
+          maxSticks,
+          winnerId: winnerEmp.empId,
+          winnerName: winnerEmp.name,
+          winnerCount: winnerEmp.count,
+          activeCount: activePlayers.length,
+          totalSticks,
+          shuffled40: usedShuffle40,
+          dynamic10: usedDynamic10
+        });
+        saveHistoryToStorage();
+
+        AudioEngine.playWin();
+        ConfettiEngine.launch(240);
+        setTimeout(() => ConfettiEngine.launch(140), 700);
+
+        document.getElementById('winnerEmpId').textContent = winnerEmp.empId;
+        document.getElementById('winnerEmpName').textContent = winnerEmp.name;
+        document.getElementById('winnerMeta').textContent =
+          `出支上限：${maxSticks} 支 ｜ 全場總支數：${totalSticks} 支（全員已 100% 數完歸零）｜ 中獎者原出：${winnerEmp.count} 支`;
+        openModal('winnerModal');
+        addLog(`🏆 本輪中獎者揭曉：${winnerEmp.empId} ${winnerEmp.name}（停在第 ${totalSticks} 支，全員已數完）`, 'ok');
+      }
+
+      function resetRoundState(silent = false) {
+        clearTimeout(countingTimer);
+        gameState = 'WAITING';
+        isPaused = false;
+        activePlayers = [];
+        alivePlayers = [];
+        totalSticks = 0;
+        currentStick = 0;
+        cursorIdx = -1;
+        lastCursorTileEl = null;
+        currentNudgeEmpId = null;
+        asked40 = false;
+        asked10 = false;
+        dynamicShuffleActive = false;
+
+        roster = roster.filter(emp => !emp.isInstant);
+        rosterMap = new Map(roster.map(emp => [emp.empId, emp]));
+        instantSeq = 1;
+        roster.forEach(emp => {
+          emp.status = 'pending';
+          emp.count = null;
+          emp.remaining = null;
+          emp.hits = 0;
+          emp.deviceId = null;
+        });
+
+        renderStageGrid();
+        document.getElementById('liveCounterPill').classList.add('hidden');
+        document.getElementById('nudgeBanner').classList.add('hidden');
+        document.getElementById('dynShuffleBadge').classList.add('hidden');
+        closeModal('winnerModal');
+        closeModal('shuffle40Modal');
+        closeModal('shuffle10Modal');
+        updateHostHUD();
+
+        // 回到等待狀態時，依照使用者偏好恢復顯示手掌表演
+        if (HandDemoEngine.isUserPreferredVisible()) {
+          HandDemoEngine.setVisible(true, false);
+        }
+
+        if (!silent) {
+          showToast('🔄 已開啟全新一輪！員工清冊已保留，重新開放掃碼');
+          addLog('🔄 已開啟全新一輪，清空所有出支狀態並重新開放掃碼', 'ok');
+        }
+      }
+
+      /* ---------------- 速度控制聯動 ---------------- */
+      function setSpeedMs(ms) {
+        baseSpeedMs = Math.max(5, Math.min(500, ms));
+        document.getElementById('speedSlider').value = 505 - baseSpeedMs;
+        document.getElementById('speedMsLabel').textContent = `${baseSpeedMs} ms/支`;
+        document.querySelectorAll('.preset-btn').forEach(btn => {
+          btn.classList.toggle('active', parseInt(btn.dataset.ms, 10) === baseSpeedMs);
+        });
+      }
+
+      /* ---------------- 彈窗與事件綁定 ---------------- */
+      function openModal(id) { document.getElementById(id).classList.add('open'); }
+      function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+
+      document.querySelectorAll('[data-close]').forEach(btn => {
+        btn.addEventListener('click', () => closeModal(btn.dataset.close));
+      });
+
+      // 參加驗證模式切換按鈕（清冊驗證 / 即時參加）
+      document.getElementById('btnJoinModeRoster').addEventListener('click', () => setJoinMode('roster'));
+      document.getElementById('btnJoinModeOpen').addEventListener('click', () => setJoinMode('open'));
+
+      // 出支上限切換按鈕（5 支 / 10 支）
+      document.getElementById('btnMode5Sticks').addEventListener('click', () => setMaxSticksMode(5));
+      document.getElementById('btnMode10Sticks').addEventListener('click', () => setMaxSticksMode(10));
+
+      // 手掌表演示意控制按鈕（隨時顯示／隱藏／切換節奏／點擊換手勢）
+      document.getElementById('btnToggleHandDemo').addEventListener('click', () => HandDemoEngine.toggleVisible());
+      document.getElementById('btnHideHandDemo').addEventListener('click', () => HandDemoEngine.setVisible(false, true));
+      document.getElementById('btnHandDemoSize').addEventListener('click', () => HandDemoEngine.cycleSize());
+      document.getElementById('btnHandDemoStyle').addEventListener('click', () => HandDemoEngine.toggleStyle());
+      document.getElementById('handDemoClickable').addEventListener('click', () => HandDemoEngine.stepNext());
+
+      // 40% 換位彈窗按鈕
+      document.getElementById('btnDoShuffle40').addEventListener('click', () => {
+        usedShuffle40 = true;
+        performFullShuffle();
+        closeModal('shuffle40Modal');
+        isPaused = false;
+        updateHostHUD();
+        scheduleNextStickStep();
+      });
+      document.getElementById('btnSkipShuffle40').addEventListener('click', () => {
+        closeModal('shuffle40Modal');
+        isPaused = false;
+        updateHostHUD();
+        scheduleNextStickStep();
+      });
+
+      // 10% 動態換位彈窗按鈕
+      document.getElementById('btnDoShuffle10').addEventListener('click', () => {
+        usedDynamic10 = true;
+        dynamicShuffleActive = true;
+        document.getElementById('dynShuffleBadge').classList.remove('hidden');
+        addLog('⚡ 已開啟最後 10%「動態換位」模式！', 'warn');
+        closeModal('shuffle10Modal');
+        isPaused = false;
+        updateHostHUD();
+        scheduleNextStickStep();
+      });
+      document.getElementById('btnSkipShuffle10').addEventListener('click', () => {
+        closeModal('shuffle10Modal');
+        isPaused = false;
+        updateHostHUD();
+        scheduleNextStickStep();
+      });
+
+      document.getElementById('stageTitle').addEventListener('blur', (e) => {
+        const clean = e.target.textContent.trim() || '🎯 線上動態數支大作戰';
+        e.target.textContent = clean;
+        safeSetStorage(STORAGE_TITLE_KEY, clean);
+      });
+
+      document.getElementById('btnOpenRosterModal').addEventListener('click', () => openModal('rosterModal'));
+      document.getElementById('btnQuickOpenRoster').addEventListener('click', () => openModal('rosterModal'));
+      document.getElementById('btnQuickGen200').addEventListener('click', generate200TestRoster);
+      document.getElementById('btnOpenAudioModal').addEventListener('click', () => openModal('audioModal'));
+      document.getElementById('btnExportResults').addEventListener('click', exportResultsToExcel);
+      document.getElementById('btnWinnerExport').addEventListener('click', exportResultsToExcel);
+
+      // 模擬測試集中區塊顯示／隱藏切換
+      const simPanel = document.getElementById('simControlPanel');
+      document.getElementById('btnToggleSimPanel').addEventListener('click', () => {
+        simPanel.classList.toggle('hidden');
+      });
+      document.getElementById('btnHideSimPanel').addEventListener('click', () => {
+        simPanel.classList.add('hidden');
+      });
+
+      // 模擬報到(測試)：隨機 85% 報到（即時參加模式無清冊時自動模擬 24 位即時參加者）
+      document.getElementById('btnSimCheckIn').addEventListener('click', () => {
+        if (gameState !== 'WAITING') { showToast('⚠️ 僅能在「開放掃碼」階段模擬報到'); return; }
+        if (roster.length === 0) {
+          if (joinMode === 'open') {
+            const sampleNames = ['小明','阿華','佳穎','冠宇','美玲','志豪','心怡','柏翰','思妤','建宏','佩珊','家豪','雅婷','宇軒','詩涵','承恩','品妍','宗翰','怡君','子豪','宥辰','欣怡','俊傑','瑋婷'];
+            sampleNames.forEach((n, idx) => {
+              const cnt = Math.floor(Math.random() * maxSticks) + 1;
+              processSubmission(`${n}${idx + 1}`, cnt, 'sim-open-' + idx);
+            });
+            showToast(`⚡ 即時參加模擬完成：已加入 ${sampleNames.length} 位參加者（1~${maxSticks} 支）`);
+            return;
+          }
+          showToast('⚠️ 請先匯入或生成員工清冊，或切換至「即時參加」模式');
+          return;
+        }
+        let added = 0;
+        roster.forEach(emp => {
+          if (emp.status !== 'locked' && Math.random() < 0.85) {
+            emp.status = 'locked';
+            emp.count = Math.floor(Math.random() * maxSticks) + 1;
+            emp.remaining = emp.count;
+            emp.hits = 0;
+            emp.deviceId = 'sim-' + emp.empId;
+            updateSingleTile(emp);
+            added++;
+          }
+        });
+        updateHostHUD();
+        showToast(`🧪 模擬報到完成：共 ${added} 位員工已鎖定出支（1~${maxSticks} 支）`);
+        addLog(`🧪 模擬報到(測試)：${added} 位員工完成鎖定（1~${maxSticks} 支）`, 'ok');
+      });
+
+      // 模擬鎖定(測試)：將清冊中其餘所有員工 100% 鎖定（依目前 5 支 / 10 支上限）
+      document.getElementById('btnSimLockAll').addEventListener('click', () => {
+        if (gameState !== 'WAITING') { showToast('⚠️ 僅能在「開放掃碼」階段模擬鎖定'); return; }
+        if (roster.length === 0) { showToast('⚠️ 請先匯入或生成員工清冊'); return; }
+        let added = 0;
+        roster.forEach(emp => {
+          if (emp.status !== 'locked') {
+            emp.status = 'locked';
+            emp.count = Math.floor(Math.random() * maxSticks) + 1;
+            emp.remaining = emp.count;
+            emp.hits = 0;
+            emp.deviceId = 'sim-all-' + emp.empId;
+            updateSingleTile(emp);
+            added++;
+          }
+        });
+        updateHostHUD();
+        showToast(`🔒 模擬鎖定完成：全員 ${roster.length} 人已鎖定（1~${maxSticks} 支）`);
+        addLog(`🔒 模擬鎖定(測試)：補齊鎖定 ${added} 人（全員鎖定，1~${maxSticks} 支）`, 'ok');
+      });
+
+      // 單機模擬報到(測試)
+      document.getElementById('btnLocalSimSubmit').addEventListener('click', () => {
+        const rawInput = document.getElementById('simEmpIdInput').value.trim();
+        const count = parseInt(document.getElementById('simStickSelect').value, 10);
+        if (!rawInput) { showToast(joinMode === 'open' ? '⚠️ 請輸入任意姓名或編號' : '⚠️ 請輸入測試工號（例如 A001）'); return; }
+        const resp = processSubmission(rawInput, count, 'local-sim-' + Date.now());
+        if (resp.status === 'OK') {
+          showToast(`✅ 單機模擬成功：【${resp.name} (${resp.empId})】鎖定 ${resp.count} 支`);
+        } else {
+          showToast(resp.message, 3800);
+        }
+      });
+
+      // 開啟新分頁單機模擬手機端(測試)
+      document.getElementById('btnOpenPlayerTab').addEventListener('click', () => {
+        window.open(getPlayerJoinUrl(), '_blank');
+      });
+
+      // 清冊匯入相關按鈕
+      document.getElementById('btnUploadRosterFile').addEventListener('click', () => document.getElementById('rosterFileInput').click());
+      document.getElementById('rosterFileInput').addEventListener('change', (e) => {
+        handleRosterFileUpload(e.target.files[0]);
+        e.target.value = '';
+      });
+      document.getElementById('btnDownloadSampleCsv').addEventListener('click', downloadSampleCsv);
+      document.getElementById('btnGen200Test').addEventListener('click', () => {
+        generate200TestRoster();
+        closeModal('rosterModal');
+      });
+      document.getElementById('btnClearRoster').addEventListener('click', () => {
+        if (roster.length === 0) return;
+        showConfirmDialog(
+          '確定要清空所有員工清冊嗎？',
+          () => {
+            setRoster([], false);
+            showToast('🗑️ 已清空員工清冊');
+          },
+          '清空員工清冊'
+        );
+      });
+      document.getElementById('btnApplyPasteRoster').addEventListener('click', () => {
+        const parsed = parseTextLinesToRoster(document.getElementById('rosterPasteInput').value);
+        if (parsed.length === 0) { showToast('⚠️ 請輸入有效名單（格式範例：A001,王小明）'); return; }
+        setRoster(parsed);
+        closeModal('rosterModal');
+      });
+
+      document.getElementById('btnStartCounting').addEventListener('click', startOrToggleCounting);
+
+      function confirmNewRound() {
+        showConfirmDialog(
+          '確定要「開啟全新一輪」嗎？\n系統將保留目前員工清冊與歷屆開獎紀錄，清空所有人的出支鎖定狀態並重新開放掃碼。',
+          () => resetRoundState(false),
+          '開啟全新一輪'
+        );
+      }
+      document.getElementById('btnNewRound').addEventListener('click', confirmNewRound);
+      document.getElementById('btnWinnerNewRound').addEventListener('click', confirmNewRound);
+      document.getElementById('btnCloseWinnerModal').addEventListener('click', () => closeModal('winnerModal'));
+
+      document.getElementById('speedSlider').addEventListener('input', (e) => setSpeedMs(505 - parseInt(e.target.value, 10)));
+      document.querySelectorAll('.preset-btn').forEach(btn => {
+        btn.addEventListener('click', () => setSpeedMs(parseInt(btn.dataset.ms, 10)));
+      });
+
+      document.getElementById('btnCopyLink').addEventListener('click', () => {
+        const url = getPlayerJoinUrl();
+        copyTextFallback(url)
+          .then(() => showToast('🔗 已複製玩家掃碼網址'))
+          .catch(() => showToast(`🔗 網址：${url}`, 4500));
+      });
+      document.getElementById('btnRegenRoom').addEventListener('click', () => {
+        if (gameState !== 'WAITING') { showToast('⚠️ 遊戲進行中無法更換房間代碼'); return; }
+        showConfirmDialog(
+          '確定要更換新的房間代碼與 QR Code 嗎？',
+          () => {
+            roomId = generateRoomCode();
+            safeSetStorage(STORAGE_ROOM_KEY, roomId);
+            initHostPeer();
+          },
+          '更換房間代碼'
+        );
+      });
+
+      document.getElementById('btnNudgeForceRelease').addEventListener('click', () => {
+        if (currentNudgeEmpId) releaseEmployeeSlot(currentNudgeEmpId, '主持人透過提醒橫幅強制釋放');
+      });
+      document.getElementById('btnCloseNudge').addEventListener('click', () => {
+        document.getElementById('nudgeBanner').classList.add('hidden');
+      });
+
+      document.getElementById('btnFullscreen').addEventListener('click', () => {
+        if (!document.fullscreenElement) document.documentElement.requestFullscreen().catch(() => {});
+        else document.exitFullscreen().catch(() => {});
+      });
+
+      // 音效面板事件
+      function syncBgmVol(val) {
+        document.getElementById('quickBgmVol').value = val;
+        document.getElementById('quickBgmVolVal').textContent = `${val}%`;
+        document.getElementById('modalBgmVol').value = val;
+        document.getElementById('modalBgmVolVal').textContent = `${val}%`;
+        AudioEngine.setBgmVolume(val / 100);
+      }
+
+      document.getElementById('btnQuickBgm').addEventListener('click', AudioEngine.toggleBgm);
+      document.getElementById('btnModalBgmToggle').addEventListener('click', AudioEngine.toggleBgm);
+      document.getElementById('btnModalSfxToggle').addEventListener('click', AudioEngine.toggleSfx);
+      document.getElementById('quickBgmVol').addEventListener('input', e => syncBgmVol(e.target.value));
+      document.getElementById('modalBgmVol').addEventListener('input', e => syncBgmVol(e.target.value));
+      document.getElementById('modalSfxVol').addEventListener('input', e => {
+        const v = e.target.value;
+        document.getElementById('modalSfxVolVal').textContent = `${v}%`;
+        AudioEngine.setSfxVolume(v / 100);
+      });
+
+      document.getElementById('btnImportBgm').addEventListener('click', () => document.getElementById('fileBgm').click());
+      document.getElementById('btnImportTick').addEventListener('click', () => document.getElementById('fileTick').click());
+      document.getElementById('btnImportWin').addEventListener('click', () => document.getElementById('fileWin').click());
+
+      document.getElementById('fileBgm').addEventListener('change', e => { AudioEngine.importCustom('bgm', e.target.files[0]); e.target.value = ''; });
+      document.getElementById('fileTick').addEventListener('change', e => { AudioEngine.importCustom('tick', e.target.files[0]); e.target.value = ''; });
+      document.getElementById('fileWin').addEventListener('change', e => { AudioEngine.importCustom('win', e.target.files[0]); e.target.value = ''; });
+
+      document.getElementById('btnTestBgm').addEventListener('click', AudioEngine.toggleBgm);
+      document.getElementById('btnTestTick').addEventListener('click', () => AudioEngine.playTick(true, 3));
+      document.getElementById('btnTestWin').addEventListener('click', AudioEngine.playWin);
+
+      document.getElementById('btnResetBgm').addEventListener('click', () => { AudioEngine.resetCustom('bgm'); showToast('↺ 已恢復預設背景音樂'); });
+      document.getElementById('btnResetTick').addEventListener('click', () => { AudioEngine.resetCustom('tick'); showToast('↺ 已恢復預設跳動音效'); });
+      document.getElementById('btnResetWin').addEventListener('click', () => { AudioEngine.resetCustom('win'); showToast('↺ 已恢復預設中獎音效'); });
+      document.getElementById('btnResetAllAudio').addEventListener('click', () => {
+        AudioEngine.resetCustom('bgm');
+        AudioEngine.resetCustom('tick');
+        AudioEngine.resetCustom('win');
+        showToast('↺ 已恢復全部預設合成音效');
+      });
+
+      // 初始化啟動
+      setSpeedMs(22);
+      HandDemoEngine.init(maxSticks);
+      syncJoinModeUI();
+      syncMaxSticksUI();
+      loadRosterFromStorage();
+      updateHostHUD();
+      initHostPeer();
+    }
+
+    /* ==========================================================================
+       二、手機玩家端核心邏輯（掃碼驗證、1~5 或 1~10 支送出、禁止覆蓋與主動退出）
+       ========================================================================== */
+    function initPlayerMode() {
+      document.body.className = 'player-mode';
+      document.getElementById('playerView').classList.remove('hidden');
+      document.getElementById('playerRoomBadge').textContent = `房間代碼：${ROOM_PARAM}`;
+
+      let playerMaxSticks = INITIAL_PLAYER_MAX;
+      let playerJoinMode = INITIAL_PLAYER_JOIN_MODE;
+      let selectedStick = null;
+      let lockedSession = null;
+      let isBusy = false;
+      let isGameStartedLocked = false;
+
+      let deviceId = safeGetStorage(STORAGE_PLAYER_DEV_KEY);
+      if (!deviceId) {
+        deviceId = 'DEV-' + Math.random().toString(36).slice(2, 10).toUpperCase() + Date.now().toString(36);
+        safeSetStorage(STORAGE_PLAYER_DEV_KEY, deviceId);
+      }
+
+      const empInput = document.getElementById('playerEmpId');
+      const lastEmp = safeGetStorage(STORAGE_PLAYER_EMP_KEY);
+      if (lastEmp) empInput.value = lastEmp;
+
+      function syncPlayerJoinModeUI(modeVal) {
+        playerJoinMode = modeVal === 'open' ? 'open' : 'roster';
+        const isOpen = playerJoinMode === 'open';
+        const badge = document.getElementById('playerJoinBadge');
+        const label = document.getElementById('playerEmpLabel');
+        if (badge) {
+          badge.textContent = isOpen ? '⚡ 即時參加（不限工號）' : '📋 清冊驗證';
+        }
+        if (label) {
+          label.textContent = isOpen
+            ? '1. 請輸入姓名、暱稱或自訂編號（免建檔即時參加）'
+            : '1. 請輸入員工編號（自動轉大寫）';
+        }
+        empInput.placeholder = isOpen ? '例如：小明 或 018' : '例如：A001';
+        empInput.style.textTransform = isOpen ? 'none' : 'uppercase';
+      }
+
+      syncPlayerJoinModeUI(playerJoinMode);
+
+      empInput.addEventListener('input', () => {
+        if (playerJoinMode === 'roster') {
+          empInput.value = empInput.value.toUpperCase().replace(/\s+/g, '');
+        }
+      });
+
+      const sticksGrid = document.getElementById('sticksGrid');
+
+      function renderPlayerSticks(maxVal) {
+        playerMaxSticks = maxVal === 5 ? 5 : 10;
+        if (selectedStick && selectedStick > playerMaxSticks) {
+          selectedStick = null;
+        }
+        document.getElementById('playerModeBadge').textContent = `上限：1 ~ ${playerMaxSticks} 支`;
+        document.getElementById('playerStickLabel').textContent = `2. 請點選本輪要出的支數（1 ~ ${playerMaxSticks} 支）`;
+
+        sticksGrid.innerHTML = '';
+        for (let i = 1; i <= playerMaxSticks; i++) {
+          const btn = document.createElement('button');
+          btn.type = 'button';
+          btn.className = 'stick-btn' + (selectedStick === i ? ' selected' : '');
+          btn.textContent = i;
+          btn.disabled = isGameStartedLocked;
+          btn.addEventListener('click', () => {
+            if (isGameStartedLocked || isBusy) return;
+            selectedStick = i;
+            sticksGrid.querySelectorAll('.stick-btn').forEach(b => b.classList.remove('selected'));
+            btn.classList.add('selected');
+          });
+          sticksGrid.appendChild(btn);
+        }
+      }
+
+      renderPlayerSticks(playerMaxSticks);
+
+      function showPlayerAlert(msg, type = 'error') {
+        const box = document.getElementById('playerAlertBox');
+        box.className = `player-alert ${type}`;
+        box.textContent = msg;
+        box.classList.remove('hidden');
+      }
+
+      function hidePlayerAlert() {
+        document.getElementById('playerAlertBox').classList.add('hidden');
+        document.getElementById('btnPlayerNudge').classList.add('hidden');
+      }
+
+      function lockPlayerGameStarted() {
+        isGameStartedLocked = true;
+        document.getElementById('playerStartedLockBox').classList.remove('hidden');
+        empInput.disabled = true;
+        document.getElementById('btnPlayerSubmit').disabled = true;
+        document.getElementById('btnPlayerExit').disabled = true;
+        document.getElementById('btnPlayerNudge').classList.add('hidden');
+        sticksGrid.querySelectorAll('.stick-btn').forEach(b => b.disabled = true);
+      }
+
+      function sendToHost(payload) {
+        return new Promise((resolve, reject) => {
+          if (typeof Peer === 'undefined') {
+            reject(new Error('連線元件尚未載入，請重新整理頁面。'));
+            return;
+          }
+          const peer = new Peer({ debug: 0 });
+          let settled = false;
+
+          const cleanup = () => {
+            setTimeout(() => { try { peer.destroy(); } catch (e) {} }, 250);
+          };
+
+          const timeout = setTimeout(() => {
+            if (!settled) {
+              settled = true;
+              cleanup();
+              reject(new Error('連線逾時，請確認網路狀態或大螢幕房間是否開啟！'));
+            }
+          }, 10000);
+
+          peer.on('open', () => {
+            const conn = peer.connect(`countgame-room-${ROOM_PARAM}`, { reliable: true });
+            conn.on('open', () => conn.send(payload));
+            conn.on('data', (resp) => {
+              if (settled) return;
+              settled = true;
+              clearTimeout(timeout);
+              cleanup();
+              resolve(resp);
+            });
+            conn.on('error', () => {
+              if (settled) return;
+              settled = true;
+              clearTimeout(timeout);
+              cleanup();
+              reject(new Error('無法連線至主持端，請重新掃描大螢幕 QR Code。'));
+            });
+          });
+
+          peer.on('error', (err) => {
+            if (settled) return;
+            settled = true;
+            clearTimeout(timeout);
+            cleanup();
+            if (err.type === 'peer-unavailable') {
+              reject(new Error('找不到此活動房間，請重新掃描大螢幕最新 QR Code！'));
+            } else {
+              reject(new Error('網路連線異常，請稍後再試。'));
+            }
+          });
+        });
+      }
+
+      // 進房時背景同步主持端最新設定（清冊/即時模式、5 支或 10 支，以及是否已開賽）
+      sendToHost({ action: 'GET_CONFIG' })
+        .then((resp) => {
+          if (resp && resp.status === 'CONFIG') {
+            if (resp.joinMode && resp.joinMode !== playerJoinMode) {
+              syncPlayerJoinModeUI(resp.joinMode);
+            }
+            if (resp.maxSticks && resp.maxSticks !== playerMaxSticks) {
+              renderPlayerSticks(resp.maxSticks);
+            }
+            if (resp.gameState && resp.gameState !== 'WAITING') {
+              lockPlayerGameStarted();
+            }
+          }
+        })
+        .catch(() => {});
+
+      document.getElementById('btnPlayerSubmit').addEventListener('click', async () => {
+        if (isBusy || isGameStartedLocked) return;
+        const empId = playerJoinMode === 'open'
+          ? empInput.value.trim()
+          : empInput.value.trim().toUpperCase();
+        if (!empId) {
+          showPlayerAlert(playerJoinMode === 'open' ? '❌ 請先輸入您的姓名、暱稱或自訂編號！' : '❌ 請先輸入您的員工編號！', 'error');
+          return;
+        }
+        if (!selectedStick) { showPlayerAlert(`❌ 請點選要出的支數（1 ~ ${playerMaxSticks} 支）！`, 'error'); return; }
+
+        isBusy = true;
+        hidePlayerAlert();
+        const submitBtn = document.getElementById('btnPlayerSubmit');
+        submitBtn.disabled = true;
+        submitBtn.textContent = '⏳ 連線驗證中...';
+
+        try {
+          const resp = await sendToHost({
+            action: 'SUBMIT',
+            empId,
+            count: selectedStick,
+            deviceId
+          });
+
+          if (resp && resp.joinMode && resp.joinMode !== playerJoinMode) {
+            syncPlayerJoinModeUI(resp.joinMode);
+          }
+          if (resp && resp.maxSticks && resp.maxSticks !== playerMaxSticks) {
+            renderPlayerSticks(resp.maxSticks);
+          }
+
+          if (resp.status === 'OK') {
+            safeSetStorage(STORAGE_PLAYER_EMP_KEY, resp.empId);
+            lockedSession = { empId: resp.empId, name: resp.name, count: resp.count };
+            document.getElementById('playerFormArea').classList.add('hidden');
+            document.getElementById('playerSuccessDetail').innerHTML =
+              `驗證成功！歡迎【<span style="color:var(--gold-bright);">${escapeHtml(resp.name)} (${escapeHtml(resp.empId)})</span>】<br>您已鎖定送出 <span style="font-size:26px; color:var(--cyan);">${resp.count}</span> 支`;
+            document.getElementById('playerSuccessBox').classList.remove('hidden');
+          } else if (resp.status === 'OCCUPIED') {
+            showPlayerAlert(resp.message, 'occupied');
+            document.getElementById('btnPlayerNudge').classList.remove('hidden');
+          } else if (resp.status === 'REJECTED_STARTED') {
+            lockPlayerGameStarted();
+          } else {
+            showPlayerAlert(resp.message || '❌ 驗證失敗，請重新確認！', 'error');
+          }
+        } catch (err) {
+          showPlayerAlert(`⚠️ ${err.message}`, 'error');
+        } finally {
+          isBusy = false;
+          if (!isGameStartedLocked) {
+            submitBtn.disabled = false;
+            submitBtn.textContent = '✅ 驗證並鎖定送出';
+          }
+        }
+      });
+
+      document.getElementById('btnPlayerNudge').addEventListener('click', async () => {
+        if (isBusy || isGameStartedLocked) return;
+        const empId = empInput.value.trim().toUpperCase();
+        if (!empId) return;
+
+        isBusy = true;
+        const nudgeBtn = document.getElementById('btnPlayerNudge');
+        nudgeBtn.disabled = true;
+        nudgeBtn.textContent = '⏳ 傳送提醒中...';
+
+        try {
+          const resp = await sendToHost({ action: 'NUDGE_RELEASE', empId, deviceId });
+          if (resp.status === 'REJECTED_STARTED') {
+            lockPlayerGameStarted();
+          } else if (resp.status === 'AVAILABLE_NOW') {
+            showPlayerAlert(resp.message, 'occupied');
+            nudgeBtn.classList.add('hidden');
+          } else {
+            showPlayerAlert(resp.message, 'occupied');
+          }
+        } catch (err) {
+          showPlayerAlert(`⚠️ ${err.message}`, 'error');
+        } finally {
+          isBusy = false;
+          nudgeBtn.disabled = false;
+          nudgeBtn.textContent = '🔔 再次通知大螢幕提醒前一位退出';
+        }
+      });
+
+      document.getElementById('btnPlayerExit').addEventListener('click', () => {
+        if (isBusy || isGameStartedLocked || !lockedSession) return;
+        showConfirmDialog(
+          `確定要退出並釋放工號【${lockedSession.empId} ${lockedSession.name}】嗎？`,
+          async () => {
+            isBusy = true;
+            const exitBtn = document.getElementById('btnPlayerExit');
+            exitBtn.disabled = true;
+            exitBtn.textContent = '⏳ 釋放工號中...';
+
+            try {
+              const resp = await sendToHost({
+                action: 'RELEASE',
+                empId: lockedSession.empId,
+                deviceId
+              });
+
+              if (resp.status === 'REJECTED_STARTED') {
+                lockPlayerGameStarted();
+              } else if (resp.status === 'RELEASED') {
+                lockedSession = null;
+                document.getElementById('playerSuccessBox').classList.add('hidden');
+                document.getElementById('playerFormArea').classList.remove('hidden');
+                showPlayerAlert('✅ 您已成功退出並釋放工號，現在可重新選擇支數或由其他人員登入。', 'occupied');
+              } else {
+                showToast(resp.message || '⚠️ 釋放失敗');
+              }
+            } catch (err) {
+              showToast(`⚠️ ${err.message}`);
+            } finally {
+              isBusy = false;
+              if (!isGameStartedLocked) {
+                exitBtn.disabled = false;
+                exitBtn.textContent = '🚪 退出並釋放此工號（讓其他人登入或重選）';
+              }
+            }
+          },
+          '退出並釋放工號'
+        );
+      });
+    }
+
+    if (IS_PLAYER_MODE) initPlayerMode();
+    else initHostMode();
+  </script>
+</body>
+</html>
